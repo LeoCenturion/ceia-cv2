@@ -22,16 +22,14 @@ def get_image_paths(data_dir: str) -> pd.DataFrame:
                 records.append({'path': str(image_path), 'category': category})
     return pd.DataFrame(records)
 
-def plot_distribution(df: pd.DataFrame, column: str, title: str, output_path: str):
+def plot_distribution(df: pd.DataFrame, column: str, title: str):
     """Plots the distribution of a given column, grouped by category."""
     plt.figure(figsize=(12, 8))
     sns.boxplot(data=df, x='category', y=column)
     plt.title(title)
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
-    print(f"Saved plot: {output_path}")
+    plt.show()
 
 
 # --- Analysis Functions ---
@@ -105,7 +103,7 @@ def analyze_texture(df: pd.DataFrame) -> pd.DataFrame:
     return df.join(pd.DataFrame(texture_features, index=df.index)).dropna()
 
 
-def plot_average_color_histogram(df: pd.DataFrame, output_dir: str):
+def plot_average_color_histogram(df: pd.DataFrame):
     """Calculates and plots the average color histogram for each category."""
     print("Plotting average color histograms...")
     categories = df['category'].unique()
@@ -136,18 +134,12 @@ def plot_average_color_histogram(df: pd.DataFrame, output_dir: str):
         plt.ylabel('Normalized Frequency')
         plt.legend()
         plt.grid(True)
-        output_path = f"{output_dir}/color_histogram_{category}.png"
-        plt.savefig(output_path)
-        plt.close()
-        print(f"Saved plot: {output_path}")
+        plt.show()
 
 
 def main():
     """Main function to run all analyses."""
     data_dir = './tp1/data/1/dataset-resized'
-    output_dir = 'analysis_plots'
-    
-    Path(output_dir).mkdir(exist_ok=True)
     
     # 1. Get image paths
     df = get_image_paths(data_dir)
@@ -157,27 +149,27 @@ def main():
         
     # 2. Analyze and plot basic metadata
     df = analyze_file_metadata(df)
-    plot_distribution(df, 'width', 'Image Width Distribution', f'{output_dir}/width_dist.png')
-    plot_distribution(df, 'height', 'Image Height Distribution', f'{output_dir}/height_dist.png')
-    plot_distribution(df, 'aspect_ratio', 'Aspect Ratio Distribution', f'{output_dir}/aspect_ratio_dist.png')
-    plot_distribution(df, 'file_size_kb', 'File Size (KB) Distribution', f'{output_dir}/file_size_dist.png')
+    plot_distribution(df, 'width', 'Image Width Distribution')
+    plot_distribution(df, 'height', 'Image Height Distribution')
+    plot_distribution(df, 'aspect_ratio', 'Aspect Ratio Distribution')
+    plot_distribution(df, 'file_size_kb', 'File Size (KB) Distribution')
 
     # 3. Analyze and plot low-level visual features
     df = analyze_low_level_features(df)
-    plot_distribution(df, 'brightness', 'Brightness Distribution', f'{output_dir}/brightness_dist.png')
-    plot_distribution(df, 'contrast', 'Contrast Distribution', f'{output_dir}/contrast_dist.png')
-    plot_distribution(df, 'sharpness', 'Sharpness (Laplacian Variance) Distribution', f'{output_dir}/sharpness_dist.png')
+    plot_distribution(df, 'brightness', 'Brightness Distribution')
+    plot_distribution(df, 'contrast', 'Contrast Distribution')
+    plot_distribution(df, 'sharpness', 'Sharpness (Laplacian Variance) Distribution')
 
     # 4. Analyze and plot texture
     df = analyze_texture(df)
-    plot_distribution(df, 'homogeneity', 'Texture Homogeneity Distribution', f'{output_dir}/homogeneity_dist.png')
-    plot_distribution(df, 'energy', 'Texture Energy Distribution', f'{output_dir}/energy_dist.png')
-    plot_distribution(df, 'correlation', 'Texture Correlation Distribution', f'{output_dir}/correlation_dist.png')
+    plot_distribution(df, 'homogeneity', 'Texture Homogeneity Distribution')
+    plot_distribution(df, 'energy', 'Texture Energy Distribution')
+    plot_distribution(df, 'correlation', 'Texture Correlation Distribution')
     
     # 5. Plot color histograms
-    plot_average_color_histogram(df, output_dir)
+    plot_average_color_histogram(df)
     
-    print("\nAnalysis complete. Plots are saved in the 'analysis_plots' directory.")
+    print("\nAnalysis complete. Plots will be displayed interactively.")
 
 if __name__ == '__main__':
     main()

@@ -27,8 +27,6 @@ from IPython.display import display
 
 # %%
 data_dir = './tp1/data/1/dataset-resized'
-output_dir = 'analysis_plots'
-Path(output_dir).mkdir(exist_ok=True)
 
 # %% [markdown]
 # ## Helper Functions
@@ -46,16 +44,14 @@ def get_image_paths(data_dir: str) -> pd.DataFrame:
                 records.append({'path': str(image_path), 'category': category})
     return pd.DataFrame(records)
 
-def plot_distribution(df: pd.DataFrame, column: str, title: str, output_path: str):
+def plot_distribution(df: pd.DataFrame, column: str, title: str):
     """Plots the distribution of a given column, grouped by category."""
     plt.figure(figsize=(12, 8))
     sns.boxplot(data=df, x='category', y=column)
     plt.title(title)
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig(output_path)
-    plt.close()
-    print(f"Saved plot: {output_path}")
+    plt.show()
 
 # %% [markdown]
 # ## Analysis Functions
@@ -130,7 +126,7 @@ def analyze_texture(df: pd.DataFrame) -> pd.DataFrame:
     return df.join(pd.DataFrame(texture_features, index=df.index)).dropna()
 
 
-def plot_average_color_histogram(df: pd.DataFrame, output_dir: str):
+def plot_average_color_histogram(df: pd.DataFrame):
     """Calculates and plots the average color histogram for each category."""
     print("Plotting average color histograms...")
     categories = df['category'].unique()
@@ -161,10 +157,7 @@ def plot_average_color_histogram(df: pd.DataFrame, output_dir: str):
         plt.ylabel('Normalized Frequency')
         plt.legend()
         plt.grid(True)
-        output_path = f"{output_dir}/color_histogram_{category}.png"
-        plt.savefig(output_path)
-        plt.close()
-        print(f"Saved plot: {output_path}")
+        plt.show()
 
 # %% [markdown]
 # ## Run Analysis
@@ -185,10 +178,10 @@ else:
 # %%
 if not df.empty:
     df_meta = analyze_file_metadata(df.copy())
-    plot_distribution(df_meta, 'width', 'Image Width Distribution', f'{output_dir}/width_dist.png')
-    plot_distribution(df_meta, 'height', 'Image Height Distribution', f'{output_dir}/height_dist.png')
-    plot_distribution(df_meta, 'aspect_ratio', 'Aspect Ratio Distribution', f'{output_dir}/aspect_ratio_dist.png')
-    plot_distribution(df_meta, 'file_size_kb', 'File Size (KB) Distribution', f'{output_dir}/file_size_dist.png')
+    plot_distribution(df_meta, 'width', 'Image Width Distribution')
+    plot_distribution(df_meta, 'height', 'Image Height Distribution')
+    plot_distribution(df_meta, 'aspect_ratio', 'Aspect Ratio Distribution')
+    plot_distribution(df_meta, 'file_size_kb', 'File Size (KB) Distribution')
     display(df_meta.head())
 
 # %% [markdown]
@@ -197,9 +190,9 @@ if not df.empty:
 # %%
 if not df.empty:
     df_low_level = analyze_low_level_features(df.copy())
-    plot_distribution(df_low_level, 'brightness', 'Brightness Distribution', f'{output_dir}/brightness_dist.png')
-    plot_distribution(df_low_level, 'contrast', 'Contrast Distribution', f'{output_dir}/contrast_dist.png')
-    plot_distribution(df_low_level, 'sharpness', 'Sharpness (Laplacian Variance) Distribution', f'{output_dir}/sharpness_dist.png')
+    plot_distribution(df_low_level, 'brightness', 'Brightness Distribution')
+    plot_distribution(df_low_level, 'contrast', 'Contrast Distribution')
+    plot_distribution(df_low_level, 'sharpness', 'Sharpness (Laplacian Variance) Distribution')
     display(df_low_level.head())
 
 # %% [markdown]
@@ -208,9 +201,9 @@ if not df.empty:
 # %%
 if not df.empty:
     df_texture = analyze_texture(df.copy())
-    plot_distribution(df_texture, 'homogeneity', 'Texture Homogeneity Distribution', f'{output_dir}/homogeneity_dist.png')
-    plot_distribution(df_texture, 'energy', 'Texture Energy Distribution', f'{output_dir}/energy_dist.png')
-    plot_distribution(df_texture, 'correlation', 'Texture Correlation Distribution', f'{output_dir}/correlation_dist.png')
+    plot_distribution(df_texture, 'homogeneity', 'Texture Homogeneity Distribution')
+    plot_distribution(df_texture, 'energy', 'Texture Energy Distribution')
+    plot_distribution(df_texture, 'correlation', 'Texture Correlation Distribution')
     display(df_texture.head())
 
 # %% [markdown]
@@ -218,5 +211,5 @@ if not df.empty:
 
 # %%
 if not df.empty:
-    plot_average_color_histogram(df, output_dir)
-    print("\nAnalysis complete. Plots are saved in the 'analysis_plots' directory.")
+    plot_average_color_histogram(df)
+    print("\nAnalysis complete. Plots are displayed inline.")
