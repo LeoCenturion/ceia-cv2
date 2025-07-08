@@ -144,7 +144,7 @@ def plot_average_color_histogram(df: pd.DataFrame, output_dir: str):
 
 def main():
     """Main function to run all analyses."""
-    data_dir = 'data'
+    data_dir = './tp1/data/1/dataset-resized'
     output_dir = 'analysis_plots'
     
     Path(output_dir).mkdir(exist_ok=True)
