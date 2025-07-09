@@ -414,11 +414,28 @@ if not df.empty:
 dtrain = xgb.DMatrix(X_train)
 y_pred_train = model.predict(dtrain)
 
-# Combine train and test data for analysis
-results_df = pd.concat([X_train, X_test], ignore_index=True)
+# Combine train and test data for analysis, including paths
+X_train_with_paths = X_train.copy()
+X_train_with_paths['path'] = all_features_df.loc[X_train.index, 'path'].values
+X_test_with_paths = X_test.copy()
+X_test_with_paths['path'] = all_features_df.loc[X_test.index, 'path'].values
+
+results_df = pd.concat([X_train_with_paths, X_test_with_paths], ignore_index=True)
 results_df['true_label'] = np.concatenate([y_train, y_test])
 results_df['predicted_label'] = np.concatenate([y_pred_train, y_pred])
 results_df['status'] = np.where(results_df['true_label'] == results_df['predicted_label'], 'Correct', 'Misclassified')
+
+# Print misclassified image paths
+print("\n--- Misclassified Image Paths ---")
+misclassified_df = results_df[results_df['status'] == 'Misclassified'].copy()
+misclassified_df['true_category'] = le.inverse_transform(misclassified_df['true_label'])
+misclassified_df['predicted_category'] = le.inverse_transform(misclassified_df['predicted_label'])
+
+for category_name, group in misclassified_df.groupby('true_category'):
+    print(f"\nImages MISCLASSIFIED from category: '{category_name}'")
+    for _, row in group.iterrows():
+        print(f"  - Path: {row['path']} (Predicted as: '{row['predicted_category']}')")
+
 
 # Identify feature columns to plot
 feature_cols = X_train.columns
