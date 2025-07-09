@@ -108,6 +108,57 @@ def analyze_texture(df: pd.DataFrame) -> pd.DataFrame:
     return df.join(pd.DataFrame(texture_features, index=df.index)).dropna()
 
 
+def analyze_dominant_colors(df: pd.DataFrame, n_colors: int = 3) -> pd.DataFrame:
+    """Finds the N dominant colors in each image using KMeans clustering."""
+    print(f"Analyzing dominant colors (top {n_colors})...")
+    
+    dominant_colors_data = []
+    
+    for path in df['path']:
+        img = cv2.imread(path)
+        if img is None:
+            colors = {}
+            for i in range(n_colors):
+                colors[f'dom_color_{i+1}_r'] = None
+                colors[f'dom_color_{i+1}_g'] = None
+                colors[f'dom_color_{i+1}_b'] = None
+            dominant_colors_data.append(colors)
+            continue
+            
+        # Convert to RGB and reshape for KMeans
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pixels = np.float32(img_rgb.reshape((-1, 3)))
+        
+        try:
+            # Using KMeans to find dominant colors
+            kmeans = MiniBatchKMeans(n_clusters=n_colors, random_state=42, n_init='auto')
+            kmeans.fit(pixels)
+            
+            # Get the colors and sort them by prevalence
+            rgb_colors = kmeans.cluster_centers_.astype(int)
+            _, counts = np.unique(kmeans.labels_, return_counts=True)
+            sorted_indices = np.argsort(-counts)
+            sorted_rgb_colors = rgb_colors[sorted_indices]
+            
+            # Store as a dictionary, flattened
+            colors = {}
+            for i in range(n_colors):
+                colors[f'dom_color_{i+1}_r'] = sorted_rgb_colors[i][0]
+                colors[f'dom_color_{i+1}_g'] = sorted_rgb_colors[i][1]
+                colors[f'dom_color_{i+1}_b'] = sorted_rgb_colors[i][2]
+            dominant_colors_data.append(colors)
+        except Exception as e:
+            print(f"Could not analyze dominant colors for {path}: {e}")
+            colors = {}
+            for i in range(n_colors):
+                colors[f'dom_color_{i+1}_r'] = None
+                colors[f'dom_color_{i+1}_g'] = None
+                colors[f'dom_color_{i+1}_b'] = None
+            dominant_colors_data.append(colors)
+            
+    return df.join(pd.DataFrame(dominant_colors_data, index=df.index)).dropna()
+
+
 def analyze_sift_features(df: pd.DataFrame, vocabulary_size: int = 100) -> pd.DataFrame:
     """Extracts SIFT features using a bag of visual words model."""
     print(f"Analyzing SIFT features with vocabulary size {vocabulary_size}...")
@@ -225,15 +276,22 @@ def main():
         plot_distribution(df, 'energy', 'Texture Energy Distribution')
         plot_distribution(df, 'correlation', 'Texture Correlation Distribution')
         
-        # 5. Plot color histograms
+        # 5. Analyze and plot dominant colors
+        df = analyze_dominant_colors(df, n_colors=3)
+        for i in range(3):
+            plot_distribution(df, f'dom_color_{i+1}_r', f'Dominant Color {i+1} (Red) Distribution')
+            plot_distribution(df, f'dom_color_{i+1}_g', f'Dominant Color {i+1} (Green) Distribution')
+            plot_distribution(df, f'dom_color_{i+1}_b', f'Dominant Color {i+1} (Blue) Distribution')
+
+        # 6. Plot color histograms
         plot_average_color_histogram(df)
         
         print("\nPlotting complete. Plots are being displayed interactively.")
 
-        # 6. Extract SIFT features
+        # 7. Extract SIFT features
         sift_features = analyze_sift_features(df)
         
-        # 7. Combine all features
+        # 8. Combine all features
         all_features_df = df.join(sift_features)
         all_features_df.dropna(inplace=True)
 
@@ -293,8 +351,8 @@ def main():
     results_df['predicted_label'] = np.concatenate([y_pred_train, y_pred])
     results_df['status'] = np.where(results_df['true_label'] == results_df['predicted_label'], 'Correct', 'Misclassified')
 
-    # Identify feature columns to plot (excluding SIFT features)
-    feature_cols = [col for col in X_train.columns if not col.startswith('sift_')]
+    # Identify feature columns to plot
+    feature_cols = X_train.columns
 
     print(f"\nAnalyzing feature distributions for {len(results_df[results_df['status'] == 'Misclassified'])} misclassified images...")
     print("Close each plot window to continue.")

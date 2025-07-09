@@ -181,7 +181,7 @@ def analyze_dominant_colors(df: pd.DataFrame, n_colors: int = 3) -> pd.DataFrame
                 colors[f'dom_color_{i+1}_b'] = None
             dominant_colors_data.append(colors)
             
-    return df.join(pd.DataFrame(dominant_colors_data, index=df.index))
+    return df.join(pd.DataFrame(dominant_colors_data, index=df.index)).dropna()
 
 
 def analyze_sift_features(df: pd.DataFrame, vocabulary_size: int = 100) -> pd.DataFrame:
@@ -420,8 +420,8 @@ results_df['true_label'] = np.concatenate([y_train, y_test])
 results_df['predicted_label'] = np.concatenate([y_pred_train, y_pred])
 results_df['status'] = np.where(results_df['true_label'] == results_df['predicted_label'], 'Correct', 'Misclassified')
 
-# Identify feature columns to plot (excluding SIFT features)
-feature_cols = [col for col in X_train.columns if not col.startswith('sift_')]
+# Identify feature columns to plot
+feature_cols = X_train.columns
 
 print(f"\nAnalyzing feature distributions for {len(results_df[results_df['status'] == 'Misclassified'])} misclassified images...")
 
