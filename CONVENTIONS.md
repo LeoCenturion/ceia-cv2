@@ -1,0 +1,3 @@
+- when running python use poetry instead. i.e `poetry run python ./script.py`
+- when running any python program like jupyter use poetry. i.e `poetry run jupyter <etc>`
+- when adding dependencies use poetry. i.e `poetry add <dependency>`
