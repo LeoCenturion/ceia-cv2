@@ -7,7 +7,9 @@
 # 1.  **File Metadata:** Image dimensions, aspect ratio, and file size.
 # 2.  **Low-Level Features:** Brightness, contrast, and sharpness.
 # 3.  **Texture:** Homogeneity, energy, and correlation from GLCM.
-# 4.  **Color:** Average color histograms per category.
+# 4.  **Color:** Average color histograms and dominant color analysis.
+# 5.  **SIFT Features:** Bag of Visual Words from SIFT descriptors.
+# 6.  **Classification:** XGBoost model trained on all features.
 
 # %%
 import os
@@ -129,6 +131,57 @@ def analyze_texture(df: pd.DataFrame) -> pd.DataFrame:
             texture_features.append({'homogeneity': None, 'energy': None, 'correlation': None})
             
     return df.join(pd.DataFrame(texture_features, index=df.index)).dropna()
+
+
+def analyze_dominant_colors(df: pd.DataFrame, n_colors: int = 3) -> pd.DataFrame:
+    """Finds the N dominant colors in each image using KMeans clustering."""
+    print(f"Analyzing dominant colors (top {n_colors})...")
+    
+    dominant_colors_data = []
+    
+    for path in df['path']:
+        img = cv2.imread(path)
+        if img is None:
+            colors = {}
+            for i in range(n_colors):
+                colors[f'dom_color_{i+1}_r'] = None
+                colors[f'dom_color_{i+1}_g'] = None
+                colors[f'dom_color_{i+1}_b'] = None
+            dominant_colors_data.append(colors)
+            continue
+            
+        # Convert to RGB and reshape for KMeans
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pixels = np.float32(img_rgb.reshape((-1, 3)))
+        
+        try:
+            # Using KMeans to find dominant colors
+            kmeans = MiniBatchKMeans(n_clusters=n_colors, random_state=42, n_init='auto')
+            kmeans.fit(pixels)
+            
+            # Get the colors and sort them by prevalence
+            rgb_colors = kmeans.cluster_centers_.astype(int)
+            _, counts = np.unique(kmeans.labels_, return_counts=True)
+            sorted_indices = np.argsort(-counts)
+            sorted_rgb_colors = rgb_colors[sorted_indices]
+            
+            # Store as a dictionary, flattened
+            colors = {}
+            for i in range(n_colors):
+                colors[f'dom_color_{i+1}_r'] = sorted_rgb_colors[i][0]
+                colors[f'dom_color_{i+1}_g'] = sorted_rgb_colors[i][1]
+                colors[f'dom_color_{i+1}_b'] = sorted_rgb_colors[i][2]
+            dominant_colors_data.append(colors)
+        except Exception as e:
+            print(f"Could not analyze dominant colors for {path}: {e}")
+            colors = {}
+            for i in range(n_colors):
+                colors[f'dom_color_{i+1}_r'] = None
+                colors[f'dom_color_{i+1}_g'] = None
+                colors[f'dom_color_{i+1}_b'] = None
+            dominant_colors_data.append(colors)
+            
+    return df.join(pd.DataFrame(dominant_colors_data, index=df.index))
 
 
 def analyze_sift_features(df: pd.DataFrame, vocabulary_size: int = 100) -> pd.DataFrame:
@@ -260,7 +313,15 @@ if not df.empty:
     display(df_texture.head())
 
 # %% [markdown]
-# ### 5. Plot Color Histograms
+# ### 5. Analyze Dominant Colors
+
+# %%
+if not df.empty:
+    df_dominant_colors = analyze_dominant_colors(df.copy(), n_colors=3)
+    display(df_dominant_colors.head())
+
+# %% [markdown]
+# ### 6. Plot Color Histograms
 
 # %%
 if not df.empty:
@@ -280,6 +341,7 @@ if not df.empty:
     features_df = analyze_file_metadata(df.copy())
     features_df = analyze_low_level_features(features_df)
     features_df = analyze_texture(features_df)
+    features_df = analyze_dominant_colors(features_df, n_colors=3)
     
     # 2. Extract SIFT features
     sift_features = analyze_sift_features(features_df)
