@@ -20,6 +20,11 @@ from pathlib import Path
 from skimage.feature import graycomatrix, graycoprops
 from collections import Counter
 from IPython.display import display
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.cluster import MiniBatchKMeans
 
 # %% [markdown]
 # ## Configuration
@@ -126,6 +131,54 @@ def analyze_texture(df: pd.DataFrame) -> pd.DataFrame:
     return df.join(pd.DataFrame(texture_features, index=df.index)).dropna()
 
 
+def analyze_sift_features(df: pd.DataFrame, vocabulary_size: int = 100) -> pd.DataFrame:
+    """Extracts SIFT features using a bag of visual words model."""
+    print(f"Analyzing SIFT features with vocabulary size {vocabulary_size}...")
+    sift = cv2.SIFT_create()
+    
+    # 1. Extract descriptors from all images to build vocabulary
+    all_descriptors = []
+    
+    print("Extracting SIFT descriptors for vocabulary...")
+    for path in df['path']:
+        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        if img is not None:
+            _, descriptors = sift.detectAndCompute(img, None)
+            if descriptors is not None:
+                all_descriptors.append(descriptors)
+
+    if not all_descriptors:
+        print("No SIFT descriptors found to build vocabulary.")
+        sift_cols = [f'sift_{i}' for i in range(vocabulary_size)]
+        return pd.DataFrame(np.nan, index=df.index, columns=sift_cols)
+
+    all_descriptors_np = np.vstack(all_descriptors)
+    
+    # 2. Build vocabulary using KMeans
+    print(f"Building vocabulary with {len(all_descriptors_np)} descriptors...")
+    kmeans = MiniBatchKMeans(n_clusters=vocabulary_size, random_state=42, batch_size=256*4, n_init='auto')
+    kmeans.fit(all_descriptors_np)
+    
+    # 3. Create histograms for each image
+    print("Creating feature histograms for each image...")
+    histograms = []
+    for path in df['path']:
+        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        hist = np.zeros(vocabulary_size)
+        if img is not None:
+            _, descriptors = sift.detectAndCompute(img, None)
+            if descriptors is not None:
+                words = kmeans.predict(descriptors)
+                for word in words:
+                    hist[word] += 1
+        if np.sum(hist) > 0:
+            hist = hist / np.sum(hist)
+        histograms.append(hist)
+        
+    sift_features_df = pd.DataFrame(histograms, index=df.index).add_prefix('sift_')
+    return sift_features_df
+
+
 def plot_average_color_histogram(df: pd.DataFrame):
     """Calculates and plots the average color histogram for each category."""
     print("Plotting average color histograms...")
@@ -213,3 +266,64 @@ if not df.empty:
 if not df.empty:
     plot_average_color_histogram(df)
     print("\nAnalysis complete. Plots are displayed inline.")
+
+# %% [markdown]
+# ## 6. Model Training with XGBoost
+#
+# This section combines all the previously defined features (metadata, low-level, texture, and SIFT) to train a classifier. The feature extraction steps are chained together to ensure that we only train on images for which all features could be successfully extracted.
+
+# %%
+if not df.empty:
+    print("--- Preparing data for model training ---")
+    
+    # 1. Chain all feature extraction steps to get a consolidated DataFrame.
+    features_df = analyze_file_metadata(df.copy())
+    features_df = analyze_low_level_features(features_df)
+    features_df = analyze_texture(features_df)
+    
+    # 2. Extract SIFT features
+    sift_features = analyze_sift_features(features_df)
+    
+    # 3. Combine all features
+    all_features_df = features_df.join(sift_features)
+    
+    # Drop rows with any NaNs that might have been produced
+    all_features_df.dropna(inplace=True)
+    
+    print(f"\nTraining on {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
+    display(all_features_df.head())
+    
+    # 4. Prepare data for XGBoost
+    y = all_features_df['category']
+    X = all_features_df.drop(columns=['path', 'category'])
+
+    # Encode labels
+    le = LabelEncoder()
+    y_encoded = le.fit_transform(y)
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.3, random_state=42, stratify=y_encoded)
+    
+    # 5. Train XGBoost model
+    print("\nTraining XGBoost model...")
+    model = xgb.XGBClassifier(objective='multi:softmax', num_class=len(le.classes_), use_label_encoder=False, eval_metric='mlogloss')
+    model.fit(X_train, y_train)
+    
+    # 6. Evaluate model
+    print("\nEvaluating model...")
+    y_pred = model.predict(X_test)
+    
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Model Accuracy: {accuracy:.4f}")
+    
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred, target_names=le.classes_))
+    
+    # 7. Plot confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='Blues')
+    plt.title('Confusion Matrix')
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+    plt.show()
