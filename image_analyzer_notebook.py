@@ -326,10 +326,10 @@ if not df.empty:
 # %%
 if not df.empty:
     plot_average_color_histogram(df)
-    print("\nAnalysis complete. Plots are displayed inline.")
+    print("\nPlotting complete. Plots are displayed inline.")
 
 # %% [markdown]
-# ## 6. Model Training with XGBoost
+# ## 7. Model Training with XGBoost
 #
 # This section combines all the previously defined features (metadata, low-level, texture, and SIFT) to train a classifier. The feature extraction steps are chained together to ensure that we only train on images for which all features could be successfully extracted.
 
