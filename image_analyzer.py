@@ -282,5 +282,29 @@ def main():
     plt.ylabel('True Label')
     plt.show()
 
+    # 12. Misclassification analysis
+    print("\n--- Analyzing Misclassifications ---")
+    dtrain = xgb.DMatrix(X_train)
+    y_pred_train = model.predict(dtrain)
+
+    # Combine train and test data for analysis
+    results_df = pd.concat([X_train, X_test], ignore_index=True)
+    results_df['true_label'] = np.concatenate([y_train, y_test])
+    results_df['predicted_label'] = np.concatenate([y_pred_train, y_pred])
+    results_df['status'] = np.where(results_df['true_label'] == results_df['predicted_label'], 'Correct', 'Misclassified')
+
+    # Identify feature columns to plot (excluding SIFT features)
+    feature_cols = [col for col in X_train.columns if not col.startswith('sift_')]
+
+    print(f"\nAnalyzing feature distributions for {len(results_df[results_df['status'] == 'Misclassified'])} misclassified images...")
+    print("Close each plot window to continue.")
+
+    for feature in feature_cols:
+        plt.figure(figsize=(10, 6))
+        sns.violinplot(data=results_df, x='status', y=feature, palette=['#a1d99b', '#f4777f'])
+        plt.title(f'Distribution of "{feature}" for Correct vs. Misclassified Images')
+        plt.show()
+
+
 if __name__ == '__main__':
     main()
