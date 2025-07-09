@@ -339,20 +339,30 @@ if not df.empty:
 if not df.empty:
     print("--- Preparing data for model training ---")
     
-    # 1. Chain all feature extraction steps to get a consolidated DataFrame.
-    features_df = analyze_file_metadata(df.copy())
-    features_df = analyze_low_level_features(features_df)
-    features_df = analyze_texture(features_df)
-    features_df = analyze_dominant_colors(features_df, n_colors=3)
+    features_cache_path = 'all_features.csv'
     
-    # 2. Extract SIFT features
-    sift_features = analyze_sift_features(features_df)
-    
-    # 3. Combine all features
-    all_features_df = features_df.join(sift_features)
-    
-    # Drop rows with any NaNs that might have been produced
-    all_features_df.dropna(inplace=True)
+    if os.path.exists(features_cache_path):
+        print(f"Loading features from cache: {features_cache_path}")
+        all_features_df = pd.read_csv(features_cache_path)
+    else:
+        print("Cache not found. Extracting features...")
+        # 1. Chain all feature extraction steps to get a consolidated DataFrame.
+        features_df = analyze_file_metadata(df.copy())
+        features_df = analyze_low_level_features(features_df)
+        features_df = analyze_texture(features_df)
+        features_df = analyze_dominant_colors(features_df, n_colors=3)
+        
+        # 2. Extract SIFT features
+        sift_features = analyze_sift_features(features_df)
+        
+        # 3. Combine all features
+        all_features_df = features_df.join(sift_features)
+        
+        # Drop rows with any NaNs that might have been produced
+        all_features_df.dropna(inplace=True)
+        
+        print(f"Saving features to cache: {features_cache_path}")
+        all_features_df.to_csv(features_cache_path, index=False)
     
     print(f"\nTraining on {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
     display(all_features_df.head())

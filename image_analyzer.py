@@ -193,46 +193,55 @@ def plot_average_color_histogram(df: pd.DataFrame):
 def main():
     """Main function to run all analyses."""
     data_dir = './tp1/data/1/dataset-resized'
-    
-    # 1. Get image paths
-    df = get_image_paths(data_dir)
-    if df.empty:
-        print(f"No images found in {data_dir}. Exiting.")
-        return
+    features_cache_path = 'all_features.csv'
+
+    if os.path.exists(features_cache_path):
+        print(f"Loading features from cache: {features_cache_path}")
+        all_features_df = pd.read_csv(features_cache_path)
+    else:
+        print("Cache not found. Extracting features...")
+        # 1. Get image paths
+        df = get_image_paths(data_dir)
+        if df.empty:
+            print(f"No images found in {data_dir}. Exiting.")
+            return
+            
+        # 2. Analyze and plot basic metadata
+        df = analyze_file_metadata(df)
+        plot_distribution(df, 'width', 'Image Width Distribution')
+        plot_distribution(df, 'height', 'Image Height Distribution')
+        plot_distribution(df, 'aspect_ratio', 'Aspect Ratio Distribution')
+        plot_distribution(df, 'file_size_kb', 'File Size (KB) Distribution')
+
+        # 3. Analyze and plot low-level visual features
+        df = analyze_low_level_features(df)
+        plot_distribution(df, 'brightness', 'Brightness Distribution')
+        plot_distribution(df, 'contrast', 'Contrast Distribution')
+        plot_distribution(df, 'sharpness', 'Sharpness (Laplacian Variance) Distribution')
+
+        # 4. Analyze and plot texture
+        df = analyze_texture(df)
+        plot_distribution(df, 'homogeneity', 'Texture Homogeneity Distribution')
+        plot_distribution(df, 'energy', 'Texture Energy Distribution')
+        plot_distribution(df, 'correlation', 'Texture Correlation Distribution')
         
-    # 2. Analyze and plot basic metadata
-    df = analyze_file_metadata(df)
-    plot_distribution(df, 'width', 'Image Width Distribution')
-    plot_distribution(df, 'height', 'Image Height Distribution')
-    plot_distribution(df, 'aspect_ratio', 'Aspect Ratio Distribution')
-    plot_distribution(df, 'file_size_kb', 'File Size (KB) Distribution')
+        # 5. Plot color histograms
+        plot_average_color_histogram(df)
+        
+        print("\nPlotting complete. Plots are being displayed interactively.")
 
-    # 3. Analyze and plot low-level visual features
-    df = analyze_low_level_features(df)
-    plot_distribution(df, 'brightness', 'Brightness Distribution')
-    plot_distribution(df, 'contrast', 'Contrast Distribution')
-    plot_distribution(df, 'sharpness', 'Sharpness (Laplacian Variance) Distribution')
+        # 6. Extract SIFT features
+        sift_features = analyze_sift_features(df)
+        
+        # 7. Combine all features
+        all_features_df = df.join(sift_features)
+        all_features_df.dropna(inplace=True)
 
-    # 4. Analyze and plot texture
-    df = analyze_texture(df)
-    plot_distribution(df, 'homogeneity', 'Texture Homogeneity Distribution')
-    plot_distribution(df, 'energy', 'Texture Energy Distribution')
-    plot_distribution(df, 'correlation', 'Texture Correlation Distribution')
-    
-    # 5. Plot color histograms
-    plot_average_color_histogram(df)
-    
-    print("\nPlotting complete. Plots are being displayed interactively.")
+        print(f"Saving features to cache: {features_cache_path}")
+        all_features_df.to_csv(features_cache_path, index=False)
 
     # --- Model Training Section ---
     print("\n--- Starting Model Training ---")
-
-    # 6. Extract SIFT features
-    sift_features = analyze_sift_features(df)
-    
-    # 7. Combine all features
-    all_features_df = df.join(sift_features)
-    all_features_df.dropna(inplace=True)
 
     print(f"Training on {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
 
