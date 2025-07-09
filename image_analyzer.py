@@ -248,8 +248,8 @@ def main():
     X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.3, random_state=42, stratify=y_encoded)
     
     # 9. Train XGBoost model
-    print("\nTraining XGBoost model...")
-    model = xgb.XGBClassifier(objective='multi:softmax', num_class=len(le.classes_), use_label_encoder=False, eval_metric='mlogloss')
+    print("\nTraining XGBoost model with GPU...")
+    model = xgb.XGBClassifier(objective='multi:softmax', num_class=len(le.classes_), use_label_encoder=False, eval_metric='mlogloss', tree_method='gpu_hist')
     model.fit(X_train, y_train)
     
     # 10. Evaluate model
