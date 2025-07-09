@@ -351,7 +351,7 @@ if not df.empty:
         features_df = analyze_low_level_features(features_df)
         features_df = analyze_texture(features_df)
         features_df = analyze_dominant_colors(features_df, n_colors=3)
-        
+
         # 2. Extract SIFT features
         sift_features = analyze_sift_features(features_df)
         
