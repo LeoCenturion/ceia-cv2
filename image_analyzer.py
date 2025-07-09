@@ -254,7 +254,9 @@ def main():
     
     # 10. Evaluate model
     print("\nEvaluating model...")
-    y_pred = model.predict(X_test)
+    # Convert test data to DMatrix to avoid device mismatch warnings
+    dtest = xgb.DMatrix(X_test)
+    y_pred = model.predict(dtest)
     
     accuracy = accuracy_score(y_test, y_pred)
     print(f"Model Accuracy: {accuracy:.4f}")
