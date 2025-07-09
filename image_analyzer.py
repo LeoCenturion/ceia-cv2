@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 from sklearn.cluster import MiniBatchKMeans
+import shutil
 
 # --- Helper Functions ---
 
@@ -356,16 +357,29 @@ def main():
     results_df['predicted_label'] = np.concatenate([y_pred_train, y_pred])
     results_df['status'] = np.where(results_df['true_label'] == results_df['predicted_label'], 'Correct', 'Misclassified')
 
-    # Print misclassified image paths
-    print("\n--- Misclassified Image Paths ---")
+    # Print and copy misclassified image paths
+    print("\n--- Misclassified Image Paths & Copying Files ---")
     misclassified_df = results_df[results_df['status'] == 'Misclassified'].copy()
     misclassified_df['true_category'] = le.inverse_transform(misclassified_df['true_label'])
     misclassified_df['predicted_category'] = le.inverse_transform(misclassified_df['predicted_label'])
 
+    # Create base directory for misclassified images
+    misclassified_dir = Path('misclassified')
+    misclassified_dir.mkdir(exist_ok=True)
+    print(f"Copying misclassified images to '{misclassified_dir}' directory...")
+
     for category_name, group in misclassified_df.groupby('true_category'):
         print(f"\nImages MISCLASSIFIED from category: '{category_name}'")
+        
+        # Create subdirectory for the category
+        category_subdir = misclassified_dir / category_name
+        category_subdir.mkdir(exist_ok=True)
+        
         for _, row in group.iterrows():
-            print(f"  - Path: {row['path']} (Predicted as: '{row['predicted_category']}')")
+            source_path = Path(row['path'])
+            dest_path = category_subdir / source_path.name
+            print(f"  - Path: {row['path']} (Predicted as: '{row['predicted_category']}') -> Copying to {dest_path}")
+            shutil.copy(source_path, dest_path)
 
     # Identify feature columns to plot
     feature_cols = X_train.columns
