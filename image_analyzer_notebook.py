@@ -370,6 +370,8 @@ if not df.empty:
 # ## 8. Dimensionality Reduction and Visualization
 #
 # We use PCA and t-SNE to reduce the dimensionality of the feature set to 2D for visualization. This helps to visually inspect how well-separated the different categories are based on the extracted features.
+#
+# Two t-SNE plots are generated: one with the full feature set, and one excluding the high-dimensional SIFT features to see the influence of the other engineered features more clearly.
 
 # %%
 if not df.empty:
@@ -419,6 +421,35 @@ if not df.empty:
         plt.show()
     else:
         print("Skipping t-SNE plot due to insufficient samples.")
+
+    # t-SNE on features without SIFT
+    tsne_cache_path_no_sift = 'tsne_results_no_sift.npy'
+    print("\nRunning t-SNE on features without SIFT... (this may take a while)")
+    plot_X_dr_no_sift = plot_X_dr.filter(regex=r'^(?!sift_).*')
+
+    # Perplexity must be less than n_samples
+    perplexity_value_no_sift = min(30, len(plot_X_dr_no_sift) - 1)
+    if perplexity_value_no_sift > 0:
+        if os.path.exists(tsne_cache_path_no_sift):
+            print(f"Loading non-SIFT t-SNE results from cache: {tsne_cache_path_no_sift}")
+            X_tsne_no_sift = np.load(tsne_cache_path_no_sift)
+        else:
+            print("Cache not found. Calculating non-SIFT t-SNE...")
+            tsne_no_sift = TSNE(n_components=2, random_state=42, perplexity=perplexity_value_no_sift)
+            X_tsne_no_sift = tsne_no_sift.fit_transform(plot_X_dr_no_sift)
+            print(f"Saving non-SIFT t-SNE results to cache: {tsne_cache_path_no_sift}")
+            np.save(tsne_cache_path_no_sift, X_tsne_no_sift)
+        
+        plt.figure(figsize=(12, 8))
+        sns.scatterplot(x=X_tsne_no_sift[:, 0], y=X_tsne_no_sift[:, 1], hue=plot_y_dr, palette='viridis', s=50, alpha=0.7)
+        plt.title('t-SNE of Feature Matrix (excluding SIFT)')
+        plt.xlabel('t-SNE Component 1')
+        plt.ylabel('t-SNE Component 2')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+        plt.tight_layout()
+        plt.show()
+    else:
+        print("Skipping non-SIFT t-SNE plot due to insufficient samples.")
 
 # %% [markdown]
 # ## 9. Model Training with XGBoost
