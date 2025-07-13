@@ -392,12 +392,20 @@ if not df.empty:
     plt.show()
 
     # t-SNE
+    tsne_cache_path = 'tsne_results.npy'
     print("\nRunning t-SNE... (this may take a while)")
     # Perplexity must be less than n_samples
     perplexity_value = min(30, len(plot_X_dr) - 1)
     if perplexity_value > 0:
-        tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity_value)
-        X_tsne = tsne.fit_transform(plot_X_dr)
+        if os.path.exists(tsne_cache_path):
+            print(f"Loading t-SNE results from cache: {tsne_cache_path}")
+            X_tsne = np.load(tsne_cache_path)
+        else:
+            print("Cache not found. Calculating t-SNE...")
+            tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity_value)
+            X_tsne = tsne.fit_transform(plot_X_dr)
+            print(f"Saving t-SNE results to cache: {tsne_cache_path}")
+            np.save(tsne_cache_path, X_tsne)
         
         plt.figure(figsize=(12, 8))
         sns.scatterplot(x=X_tsne[:, 0], y=X_tsne[:, 1], hue=plot_y_dr, palette='viridis', s=50, alpha=0.7)
