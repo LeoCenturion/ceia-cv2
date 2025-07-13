@@ -372,9 +372,7 @@ def main():
     
     # 10. Evaluate model
     print("\nEvaluating model...")
-    # Convert test data to DMatrix to avoid device mismatch warnings
-    dtest = xgb.DMatrix(X_test)
-    y_pred = model.predict(dtest)
+    y_pred = model.predict(X_test)
     
     accuracy = accuracy_score(y_test, y_pred)
     print(f"Model Accuracy: {accuracy:.4f}")
@@ -393,8 +391,7 @@ def main():
 
     # 12. Misclassification analysis
     print("\n--- Analyzing Misclassifications ---")
-    dtrain = xgb.DMatrix(X_train)
-    y_pred_train = model.predict(dtrain)
+    y_pred_train = model.predict(X_train)
 
     # Combine train and test data for analysis, including paths
     X_train_with_paths = X_train.copy()
