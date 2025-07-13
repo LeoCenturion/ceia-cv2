@@ -27,6 +27,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 from sklearn.cluster import MiniBatchKMeans
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 import shutil
 
 # %% [markdown]
@@ -367,6 +369,46 @@ if not df.empty:
     
     print(f"\nTraining on {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
     display(all_features_df.head())
+
+    # --- Dimensionality Reduction and Visualization ---
+    print("\n--- Performing Dimensionality Reduction ---")
+    
+    # Prepare data for plotting
+    plot_y_dr = all_features_df['category']
+    plot_X_dr = all_features_df.drop(columns=['path', 'category'])
+    
+    # PCA
+    print("Running PCA...")
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(plot_X_dr)
+    
+    plt.figure(figsize=(12, 8))
+    sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=plot_y_dr, palette='viridis', s=50, alpha=0.7)
+    plt.title('PCA of Feature Matrix')
+    plt.xlabel('Principal Component 1')
+    plt.ylabel('Principal Component 2')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    plt.tight_layout()
+    plt.show()
+
+    # t-SNE
+    print("\nRunning t-SNE... (this may take a while)")
+    # Perplexity must be less than n_samples
+    perplexity_value = min(30, len(plot_X_dr) - 1)
+    if perplexity_value > 0:
+        tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity_value)
+        X_tsne = tsne.fit_transform(plot_X_dr)
+        
+        plt.figure(figsize=(12, 8))
+        sns.scatterplot(x=X_tsne[:, 0], y=X_tsne[:, 1], hue=plot_y_dr, palette='viridis', s=50, alpha=0.7)
+        plt.title('t-SNE of Feature Matrix')
+        plt.xlabel('t-SNE Component 1')
+        plt.ylabel('t-SNE Component 2')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+        plt.tight_layout()
+        plt.show()
+    else:
+        print("Skipping t-SNE plot due to insufficient samples.")
     
     # 4. Prepare data for XGBoost
     y = all_features_df['category']
