@@ -354,7 +354,7 @@ def main():
 
     print(f"Loaded {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
 
-    # 8. Prepare data for XGBoost
+    # 9. Prepare data for XGBoost
     y = all_features_df['category']
     X = all_features_df.drop(columns=['path', 'category'])
     
