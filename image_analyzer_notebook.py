@@ -332,16 +332,12 @@ if not df.empty:
     print("\nPlotting complete. Plots are displayed inline.")
 
 # %% [markdown]
-# ## 7. Model Training with XGBoost
+# ## 7. Feature Loading & Extraction
 #
-# This section combines all the previously defined features (metadata, low-level, texture, and SIFT) to train a classifier. The feature extraction steps are chained together to ensure that we only train on images for which all features could be successfully extracted.
-#
-# The model will be trained using CUDA if a compatible GPU and XGBoost installation are available.
+# This section loads the pre-compiled feature dataframe from `all_features.csv` if it exists. Otherwise, it runs all the feature extraction functions and saves the result to the cache file.
 
 # %%
 if not df.empty:
-    print("--- Preparing data for model training ---")
-    
     features_cache_path = 'all_features.csv'
     
     if os.path.exists(features_cache_path):
@@ -349,16 +345,16 @@ if not df.empty:
         all_features_df = pd.read_csv(features_cache_path)
     else:
         print("Cache not found. Extracting features...")
-        # 1. Chain all feature extraction steps to get a consolidated DataFrame.
+        # Chain all feature extraction steps to get a consolidated DataFrame.
         features_df = analyze_file_metadata(df.copy())
         features_df = analyze_low_level_features(features_df)
         features_df = analyze_texture(features_df)
         features_df = analyze_dominant_colors(features_df, n_colors=3)
 
-        # 2. Extract SIFT features
+        # Extract SIFT features
         sift_features = analyze_sift_features(features_df)
         
-        # 3. Combine all features
+        # Combine all features
         all_features_df = features_df.join(sift_features)
         
         # Drop rows with any NaNs that might have been produced
@@ -367,10 +363,16 @@ if not df.empty:
         print(f"Saving features to cache: {features_cache_path}")
         all_features_df.to_csv(features_cache_path, index=False)
     
-    print(f"\nTraining on {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
+    print(f"\nLoaded {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
     display(all_features_df.head())
 
-    # --- Dimensionality Reduction and Visualization ---
+# %% [markdown]
+# ## 8. Dimensionality Reduction and Visualization
+#
+# We use PCA and t-SNE to reduce the dimensionality of the feature set to 2D for visualization. This helps to visually inspect how well-separated the different categories are based on the extracted features.
+
+# %%
+if not df.empty:
     print("\n--- Performing Dimensionality Reduction ---")
     
     # Prepare data for plotting
@@ -417,8 +419,15 @@ if not df.empty:
         plt.show()
     else:
         print("Skipping t-SNE plot due to insufficient samples.")
-    
-    # 4. Prepare data for XGBoost
+
+# %% [markdown]
+# ## 9. Model Training with XGBoost
+#
+# This section trains the XGBoost classifier on the full feature set. The model will be trained using CUDA if a compatible GPU and XGBoost installation are available.
+
+# %%
+if not df.empty:
+    # Prepare data for XGBoost
     y = all_features_df['category']
     X = all_features_df.drop(columns=['path', 'category'])
 
@@ -429,12 +438,12 @@ if not df.empty:
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.3, random_state=42, stratify=y_encoded)
     
-    # 5. Train XGBoost model
+    # Train XGBoost model
     print("\nTraining XGBoost model with GPU...")
     model = xgb.XGBClassifier(objective='multi:softmax', num_class=len(le.classes_), use_label_encoder=False, eval_metric='mlogloss', tree_method='gpu_hist')
     model.fit(X_train, y_train)
     
-    # 6. Evaluate model
+    # Evaluate model
     print("\nEvaluating model...")
     y_pred = model.predict(X_test)
     
@@ -444,7 +453,7 @@ if not df.empty:
     print("\nClassification Report:")
     print(classification_report(y_test, y_pred, target_names=le.classes_))
     
-    # 7. Plot confusion matrix
+    # Plot confusion matrix
     cm = confusion_matrix(y_test, y_pred)
     plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='Blues')
@@ -454,7 +463,7 @@ if not df.empty:
     plt.show()
 
 # %% [markdown]
-# ## 8. Misclassification Analysis
+# ## 10. Misclassification Analysis
 #
 # Here we analyze the feature distributions for correctly and incorrectly classified images to understand what might be causing errors.
 

@@ -301,11 +301,6 @@ def main():
         print(f"Saving features to cache: {features_cache_path}")
         all_features_df.to_csv(features_cache_path, index=False)
 
-    # --- Model Training Section ---
-    print("\n--- Starting Model Training ---")
-
-    print(f"Training on {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
-
     # --- Dimensionality Reduction and Visualization ---
     print("\n--- Performing Dimensionality Reduction ---")
     
@@ -354,6 +349,11 @@ def main():
     else:
         print("Skipping t-SNE plot due to insufficient samples.")
 
+    # --- Model Training Section ---
+    print("\n--- Starting Model Training ---")
+
+    print(f"Loaded {len(all_features_df)} images with {len(all_features_df.columns) - 2} features.")
+
     # 8. Prepare data for XGBoost
     y = all_features_df['category']
     X = all_features_df.drop(columns=['path', 'category'])
@@ -365,12 +365,12 @@ def main():
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.3, random_state=42, stratify=y_encoded)
     
-    # 9. Train XGBoost model
+    # 10. Train XGBoost model
     print("\nTraining XGBoost model with GPU...")
     model = xgb.XGBClassifier(objective='multi:softmax', num_class=len(le.classes_), use_label_encoder=False, eval_metric='mlogloss', tree_method='gpu_hist')
     model.fit(X_train, y_train)
     
-    # 10. Evaluate model
+    # 11. Evaluate model
     print("\nEvaluating model...")
     y_pred = model.predict(X_test)
     
@@ -380,7 +380,7 @@ def main():
     print("\nClassification Report:")
     print(classification_report(y_test, y_pred, target_names=le.classes_))
     
-    # 11. Plot confusion matrix
+    # 12. Plot confusion matrix
     cm = confusion_matrix(y_test, y_pred)
     plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='Blues')
@@ -389,7 +389,7 @@ def main():
     plt.ylabel('True Label')
     plt.show()
 
-    # 12. Misclassification analysis
+    # 13. Misclassification analysis
     print("\n--- Analyzing Misclassifications ---")
     y_pred_train = model.predict(X_train)
 
