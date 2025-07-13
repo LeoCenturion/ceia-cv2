@@ -9,7 +9,7 @@ from skimage.feature import graycomatrix, graycoprops
 from collections import Counter
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.decomposition import PCA
@@ -308,10 +308,15 @@ def main():
     plot_y_dr = all_features_df['category']
     plot_X_dr = all_features_df.drop(columns=['path', 'category'])
     
+    # Normalize features before dimensionality reduction
+    print("Normalizing features...")
+    scaler = StandardScaler()
+    plot_X_dr_scaled = scaler.fit_transform(plot_X_dr)
+    
     # PCA
     print("Running PCA...")
     pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(plot_X_dr)
+    X_pca = pca.fit_transform(plot_X_dr_scaled)
     
     plt.figure(figsize=(12, 8))
     sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=plot_y_dr, palette='viridis', s=50, alpha=0.7)
@@ -326,7 +331,7 @@ def main():
     tsne_cache_path = 'tsne_results.npy'
     print("\nRunning t-SNE... (this may take a while)")
     # Perplexity must be less than n_samples
-    perplexity_value = min(30, len(plot_X_dr) - 1)
+    perplexity_value = min(30, len(plot_X_dr_scaled) - 1)
     if perplexity_value > 0:
         if os.path.exists(tsne_cache_path):
             print(f"Loading t-SNE results from cache: {tsne_cache_path}")
@@ -334,7 +339,7 @@ def main():
         else:
             print("Cache not found. Calculating t-SNE...")
             tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity_value)
-            X_tsne = tsne.fit_transform(plot_X_dr)
+            X_tsne = tsne.fit_transform(plot_X_dr_scaled)
             print(f"Saving t-SNE results to cache: {tsne_cache_path}")
             np.save(tsne_cache_path, X_tsne)
         
@@ -354,8 +359,12 @@ def main():
     print("\nRunning t-SNE on features without SIFT... (this may take a while)")
     plot_X_dr_no_sift = plot_X_dr.filter(regex=r'^(?!sift_).*')
 
+    # Normalize the non-SIFT features separately
+    scaler_no_sift = StandardScaler()
+    plot_X_dr_no_sift_scaled = scaler_no_sift.fit_transform(plot_X_dr_no_sift)
+
     # Perplexity must be less than n_samples
-    perplexity_value_no_sift = min(30, len(plot_X_dr_no_sift) - 1)
+    perplexity_value_no_sift = min(30, len(plot_X_dr_no_sift_scaled) - 1)
     if perplexity_value_no_sift > 0:
         if os.path.exists(tsne_cache_path_no_sift):
             print(f"Loading non-SIFT t-SNE results from cache: {tsne_cache_path_no_sift}")
@@ -363,7 +372,7 @@ def main():
         else:
             print("Cache not found. Calculating non-SIFT t-SNE...")
             tsne_no_sift = TSNE(n_components=2, random_state=42, perplexity=perplexity_value_no_sift)
-            X_tsne_no_sift = tsne_no_sift.fit_transform(plot_X_dr_no_sift)
+            X_tsne_no_sift = tsne_no_sift.fit_transform(plot_X_dr_no_sift_scaled)
             print(f"Saving non-SIFT t-SNE results to cache: {tsne_cache_path_no_sift}")
             np.save(tsne_cache_path_no_sift, X_tsne_no_sift)
         
