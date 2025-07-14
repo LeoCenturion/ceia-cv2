@@ -57,7 +57,7 @@ def get_image_paths(data_dir: str) -> pd.DataFrame:
 def plot_distribution(df: pd.DataFrame, column: str, title: str):
     """Plots the distribution of a given column, grouped by category."""
     plt.figure(figsize=(12, 8))
-    sns.boxplot(data=df, x='category', y=column)
+    sns.boxplot(data=df, x='category', y=column, palette='Set2')
     plt.title(title)
     plt.xticks(rotation=45)
     plt.tight_layout()
@@ -392,7 +392,7 @@ if not df.empty:
     X_pca = pca.fit_transform(plot_X_dr_scaled)
     
     plt.figure(figsize=(12, 8))
-    sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=plot_y_dr, palette='viridis', s=50, alpha=0.7)
+    sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=plot_y_dr, palette='Set2', s=50, alpha=0.7)
     plt.title('PCA of Feature Matrix')
     plt.xlabel('Principal Component 1')
     plt.ylabel('Principal Component 2')
@@ -417,7 +417,7 @@ if not df.empty:
             np.save(tsne_cache_path, X_tsne)
         
         plt.figure(figsize=(12, 8))
-        sns.scatterplot(x=X_tsne[:, 0], y=X_tsne[:, 1], hue=plot_y_dr, palette='viridis', s=50, alpha=0.7)
+        sns.scatterplot(x=X_tsne[:, 0], y=X_tsne[:, 1], hue=plot_y_dr, palette='Set2', s=50, alpha=0.7)
         plt.title('t-SNE of Feature Matrix')
         plt.xlabel('t-SNE Component 1')
         plt.ylabel('t-SNE Component 2')
@@ -450,7 +450,7 @@ if not df.empty:
             np.save(tsne_cache_path_no_sift, X_tsne_no_sift)
         
         plt.figure(figsize=(12, 8))
-        sns.scatterplot(x=X_tsne_no_sift[:, 0], y=X_tsne_no_sift[:, 1], hue=plot_y_dr, palette='viridis', s=50, alpha=0.7)
+        sns.scatterplot(x=X_tsne_no_sift[:, 0], y=X_tsne_no_sift[:, 1], hue=plot_y_dr, palette='Set2', s=50, alpha=0.7)
         plt.title('t-SNE of Feature Matrix (excluding SIFT)')
         plt.xlabel('t-SNE Component 1')
         plt.ylabel('t-SNE Component 2')
@@ -496,7 +496,7 @@ if not df.empty:
     # Plot confusion matrix
     cm = confusion_matrix(y_test, y_pred)
     plt.figure(figsize=(10, 8))
-    sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='Blues')
+    sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='cividis')
     plt.title('Confusion Matrix')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
@@ -554,6 +554,6 @@ print(f"\nAnalyzing feature distributions for {len(results_df[results_df['status
 
 for feature in feature_cols:
     plt.figure(figsize=(10, 6))
-    sns.violinplot(data=results_df, x='status', y=feature, palette=['#a1d99b', '#f4777f'])
+    sns.violinplot(data=results_df, x='status', y=feature, palette='Set2')
     plt.title(f'Distribution of "{feature}" for Correct vs. Misclassified Images')
     plt.show()
