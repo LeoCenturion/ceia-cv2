@@ -22,6 +22,9 @@ from pathlib import Path
 from skimage.feature import graycomatrix, graycoprops
 from collections import Counter
 from IPython.display import display
+import torch
+from PIL import Image
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -557,3 +560,58 @@ for feature in feature_cols:
     sns.violinplot(data=results_df, x='status', y=feature, palette='Set2')
     plt.title(f'Distribution of "{feature}" for Correct vs. Misclassified Images')
     plt.show()
+
+# %% [markdown]
+# ## 11. Image Classification with pre-trained ResNet-50
+#
+# This section uses a pre-trained ResNet-50 model from Hugging Face to perform zero-shot classification on a few sample images from each category. The model was pre-trained on the ImageNet dataset, so its predictions will be from ImageNet's 1,000 classes. This demonstrates the model's out-of-the-box capabilities on our dataset without any fine-tuning.
+
+# %%
+if not df.empty:
+    # Load ResNet-50 processor and model
+    print("Loading ResNet-50 model from Hugging Face...")
+    processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+    model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-50")
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+    print(f"Model loaded on {device}.")
+
+    # Get a few sample images from each category
+    sample_images_df = df.groupby('category').apply(lambda x: x.sample(min(len(x), 2), random_state=42)).reset_index(drop=True)
+
+    print("\n--- Performing Zero-Shot Classification on Sample Images ---")
+    for _, row in sample_images_df.iterrows():
+        image_path = row['path']
+        true_category = row['category']
+        
+        try:
+            image = Image.open(image_path).convert("RGB")
+            
+            # Preprocess the image
+            inputs = processor(images=image, return_tensors="pt").to(device)
+            
+            # Perform inference
+            with torch.no_grad():
+                outputs = model(**inputs)
+            
+            logits = outputs.logits
+            
+            # Get top 5 predictions
+            top5_probs, top5_indices = torch.topk(logits.softmax(dim=-1), 5)
+            
+            print(f"\nImage: {image_path} (True Category: {true_category})")
+            
+            # Display image
+            plt.imshow(image)
+            plt.axis('off')
+            plt.show()
+
+            print("Top 5 Predictions:")
+            for i in range(5):
+                pred_label = model.config.id2label[top5_indices[0, i].item()]
+                pred_prob = top5_probs[0, i].item()
+                print(f"  - {pred_label} (confidence: {pred_prob:.4f})")
+                
+        except Exception as e:
+            print(f"Could not process image {image_path}: {e}")
