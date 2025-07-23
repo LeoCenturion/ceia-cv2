@@ -562,98 +562,125 @@ for feature in feature_cols:
     plt.show()
 
 # %% [markdown]
-# ## 11. Image Classification with pre-trained ResNet-50
+# ## 11. Fine-Tuning ResNet-50
 #
-# This section uses a pre-trained ResNet-50 model from Hugging Face to perform zero-shot classification on the test set. We map the 1,000 ImageNet classes to our six custom categories using a keyword-based heuristic. The model's performance is then evaluated using a confusion matrix, similar to the XGBoost model.
+# This section fine-tunes a pre-trained ResNet-50 model from Hugging Face on our dataset. We replace the original classification head with a new one tailored to our specific categories. The model's base layers are frozen, and only the new head is trained for a few epochs. This technique, known as transfer learning, is efficient and effective for adapting large models to specialized tasks.
 
 # %%
 if not df.empty:
-    # Load ResNet-50 processor and model
-    print("Loading ResNet-50 model from Hugging Face...")
+    from torch.utils.data import Dataset, DataLoader
+    from torch.optim import AdamW
+    from tqdm.auto import tqdm # For progress bars
+    
+    # 1. Create a custom PyTorch Dataset
+    class ImageClassificationDataset(Dataset):
+        def __init__(self, df, processor, label_encoder):
+            self.df = df
+            self.processor = processor
+            self.label_encoder = label_encoder
+
+        def __len__(self):
+            return len(self.df)
+
+        def __getitem__(self, idx):
+            row = self.df.iloc[idx]
+            image_path = row['path']
+            image = Image.open(image_path).convert("RGB")
+            
+            # The processor returns a dict with 'pixel_values'
+            inputs = self.processor(images=image, return_tensors="pt")
+            pixel_values = inputs['pixel_values'].squeeze(0) # Remove batch dimension
+            
+            label = self.label_encoder.transform([row['category']])[0]
+            
+            return pixel_values, label
+
+    # 2. Load ResNet-50 and replace the classification head
+    print("Loading ResNet-50 model and replacing classification head...")
+    num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
-    model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-50")
+    model = AutoModelForImageClassification.from_pretrained(
+        "microsoft/resnet-50", 
+        num_labels=num_labels, 
+        id2label={i: label for i, label in enumerate(le.classes_)},
+        label2id={label: i for i, label in enumerate(le.classes_)},
+        ignore_mismatched_sizes=True # This allows replacing the head
+    )
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     print(f"Model loaded on {device}.")
-
-    # 1. Define a mapping from our categories to ImageNet label keywords
-    print("Defining mapping from custom categories to ImageNet labels...")
-    imagenet_keyword_map = {
-        'cardboard': ['carton', 'box'],
-        'glass': ['bottle', 'jar'],
-        'metal': ['can', 'foil', 'metal', 'screw'],
-        'paper': ['paper', 'envelope', 'ticket', 'napkin'],
-        'plastic': ['plastic bag'],
-        'trash': ['trash', 'garbage', 'ashcan', 'diaper'],
-    }
-
-    # Invert the id2label to label2id for easier lookup
-    label2id = {v: k for k, v in model.config.id2label.items()}
     
-    # Create a map from our category to a list of ImageNet label indices
-    category_to_indices = {cat: [] for cat in imagenet_keyword_map.keys()}
-    for label, idx in label2id.items():
-        # Handle special cases to improve mapping accuracy
-        if 'water bottle' in label or 'pill bottle' in label:
-            category_to_indices['plastic'].append(idx)
-            continue
+    # 3. Prepare data loaders
+    # Use the same train/test split from the XGBoost section
+    train_df = all_features_df.loc[X_train.index]
+    test_df = all_features_df.loc[X_test.index]
+    
+    train_dataset = ImageClassificationDataset(train_df, processor, le)
+    test_dataset = ImageClassificationDataset(test_df, processor, le)
+    
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=os.cpu_count())
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=os.cpu_count())
+    
+    # 4. Fine-tune the model
+    # Freeze base layers and train only the classifier
+    for param in model.base_model.parameters():
+        param.requires_grad = False
         
-        for cat, keywords in imagenet_keyword_map.items():
-            if any(keyword in label.lower() for keyword in keywords):
-                category_to_indices[cat].append(idx)
+    optimizer = AdamW(model.classifier.parameters(), lr=5e-4)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    num_epochs = 3
 
-    print("Mapping from custom categories to number of ImageNet labels:")
-    for cat, indices in category_to_indices.items():
-        print(f"  - '{cat}': {len(set(indices))} labels")
+    print("\n--- Fine-tuning the classification head ---")
+    for epoch in range(num_epochs):
+        model.train()
+        total_loss = 0
+        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")
+        for batch in progress_bar:
+            inputs, labels = batch
+            inputs, labels = inputs.to(device), labels.to(device)
 
-    # 2. Get predictions for the test set
-    print(f"\n--- Classifying {len(X_test)} test images with ResNet-50 ---")
-    y_true_resnet = le.inverse_transform(y_test)
-    y_pred_resnet = []
-
-    test_image_paths = all_features_df.loc[X_test.index, 'path']
-
-    for image_path in test_image_paths:
-        try:
-            image = Image.open(image_path).convert("RGB")
-            inputs = processor(images=image, return_tensors="pt").to(device)
-            
-            with torch.no_grad():
-                outputs = model(**inputs)
-            
-            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)[0]
-            
-            # For each category, sum the probabilities of its mapped ImageNet classes
-            category_scores = {}
-            for cat, indices in category_to_indices.items():
-                if indices:
-                    category_scores[cat] = probs[indices].sum().item()
-                else:
-                    category_scores[cat] = 0
-            
-            # The prediction is the category with the highest score
-            predicted_category = max(category_scores, key=category_scores.get) if category_scores else le.classes_[0]
-            y_pred_resnet.append(predicted_category)
-            
-        except Exception as e:
-            print(f"Could not process image {image_path}: {e}")
-            y_pred_resnet.append(le.classes_[0]) # Predict first class on error
-
-    # 3. Evaluate and plot confusion matrix
-    print("\n--- ResNet-50 Zero-Shot Classification Results ---")
+            optimizer.zero_grad()
+            outputs = model(pixel_values=inputs)
+            loss = loss_fn(outputs.logits, labels)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+            progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
+        
+        avg_loss = total_loss / len(train_loader)
+        print(f"Epoch {epoch+1} - Average Training Loss: {avg_loss:.4f}")
     
-    accuracy = accuracy_score(y_true_resnet, y_pred_resnet)
-    print(f"ResNet-50 Zero-Shot Accuracy: {accuracy:.4f}")
-    
+    # 5. Evaluate the fine-tuned model
+    print("\n--- Evaluating the fine-tuned model ---")
+    model.eval()
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for batch in tqdm(test_loader, desc="Evaluating"):
+            inputs, labels = batch
+            inputs = inputs.to(device)
+            
+            outputs = model(pixel_values=inputs)
+            preds = torch.argmax(outputs.logits, dim=1)
+            
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.numpy())
+
+    y_true_resnet_tuned = all_labels
+    y_pred_resnet_tuned = all_preds
+
+    accuracy = accuracy_score(y_true_resnet_tuned, y_pred_resnet_tuned)
+    print(f"Fine-tuned ResNet-50 Accuracy: {accuracy:.4f}")
+
     print("\nClassification Report:")
-    print(classification_report(y_true_resnet, y_pred_resnet, target_names=le.classes_))
-    
-    # Plot confusion matrix
-    cm = confusion_matrix(y_true_resnet, y_pred_resnet, labels=le.classes_)
+    print(classification_report(y_true_resnet_tuned, y_pred_resnet_tuned, target_names=le.classes_))
+
+    cm = confusion_matrix(y_true_resnet_tuned, y_pred_resnet_tuned)
     plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='cividis')
-    plt.title('ResNet-50 Zero-Shot Confusion Matrix')
+    plt.title('Fine-tuned ResNet-50 Confusion Matrix')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
     plt.show()
