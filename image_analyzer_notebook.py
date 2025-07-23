@@ -564,7 +564,7 @@ for feature in feature_cols:
 # %% [markdown]
 # ## 11. Image Classification with pre-trained ResNet-50
 #
-# This section uses a pre-trained ResNet-50 model from Hugging Face to perform zero-shot classification on a few sample images from each category. The model was pre-trained on the ImageNet dataset, so its predictions will be from ImageNet's 1,000 classes. This demonstrates the model's out-of-the-box capabilities on our dataset without any fine-tuning.
+# This section uses a pre-trained ResNet-50 model from Hugging Face to perform zero-shot classification on the test set. We map the 1,000 ImageNet classes to our six custom categories using a keyword-based heuristic. The model's performance is then evaluated using a confusion matrix, similar to the XGBoost model.
 
 # %%
 if not df.empty:
@@ -577,41 +577,83 @@ if not df.empty:
     model.to(device)
     print(f"Model loaded on {device}.")
 
-    # Get a few sample images from each category
-    sample_images_df = df.groupby('category').apply(lambda x: x.sample(min(len(x), 2), random_state=42)).reset_index(drop=True)
+    # 1. Define a mapping from our categories to ImageNet label keywords
+    print("Defining mapping from custom categories to ImageNet labels...")
+    imagenet_keyword_map = {
+        'cardboard': ['carton', 'box'],
+        'glass': ['bottle', 'jar'],
+        'metal': ['can', 'foil', 'metal', 'screw'],
+        'paper': ['paper', 'envelope', 'ticket', 'napkin'],
+        'plastic': ['plastic bag'],
+        'trash': ['trash', 'garbage', 'ashcan', 'diaper'],
+    }
 
-    print("\n--- Performing Zero-Shot Classification on Sample Images ---")
-    for _, row in sample_images_df.iterrows():
-        image_path = row['path']
-        true_category = row['category']
+    # Invert the id2label to label2id for easier lookup
+    label2id = {v: k for k, v in model.config.id2label.items()}
+    
+    # Create a map from our category to a list of ImageNet label indices
+    category_to_indices = {cat: [] for cat in imagenet_keyword_map.keys()}
+    for label, idx in label2id.items():
+        # Handle special cases to improve mapping accuracy
+        if 'water bottle' in label or 'pill bottle' in label:
+            category_to_indices['plastic'].append(idx)
+            continue
         
+        for cat, keywords in imagenet_keyword_map.items():
+            if any(keyword in label.lower() for keyword in keywords):
+                category_to_indices[cat].append(idx)
+
+    print("Mapping from custom categories to number of ImageNet labels:")
+    for cat, indices in category_to_indices.items():
+        print(f"  - '{cat}': {len(set(indices))} labels")
+
+    # 2. Get predictions for the test set
+    print(f"\n--- Classifying {len(X_test)} test images with ResNet-50 ---")
+    y_true_resnet = le.inverse_transform(y_test)
+    y_pred_resnet = []
+
+    test_image_paths = all_features_df.loc[X_test.index, 'path']
+
+    for image_path in test_image_paths:
         try:
             image = Image.open(image_path).convert("RGB")
-            
-            # Preprocess the image
             inputs = processor(images=image, return_tensors="pt").to(device)
             
-            # Perform inference
             with torch.no_grad():
                 outputs = model(**inputs)
             
-            logits = outputs.logits
+            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)[0]
             
-            # Get top 5 predictions
-            top5_probs, top5_indices = torch.topk(logits.softmax(dim=-1), 5)
+            # For each category, sum the probabilities of its mapped ImageNet classes
+            category_scores = {}
+            for cat, indices in category_to_indices.items():
+                if indices:
+                    category_scores[cat] = probs[indices].sum().item()
+                else:
+                    category_scores[cat] = 0
             
-            print(f"\nImage: {image_path} (True Category: {true_category})")
+            # The prediction is the category with the highest score
+            predicted_category = max(category_scores, key=category_scores.get) if category_scores else le.classes_[0]
+            y_pred_resnet.append(predicted_category)
             
-            # Display image
-            plt.imshow(image)
-            plt.axis('off')
-            plt.show()
-
-            print("Top 5 Predictions:")
-            for i in range(5):
-                pred_label = model.config.id2label[top5_indices[0, i].item()]
-                pred_prob = top5_probs[0, i].item()
-                print(f"  - {pred_label} (confidence: {pred_prob:.4f})")
-                
         except Exception as e:
             print(f"Could not process image {image_path}: {e}")
+            y_pred_resnet.append(le.classes_[0]) # Predict first class on error
+
+    # 3. Evaluate and plot confusion matrix
+    print("\n--- ResNet-50 Zero-Shot Classification Results ---")
+    
+    accuracy = accuracy_score(y_true_resnet, y_pred_resnet)
+    print(f"ResNet-50 Zero-Shot Accuracy: {accuracy:.4f}")
+    
+    print("\nClassification Report:")
+    print(classification_report(y_true_resnet, y_pred_resnet, target_names=le.classes_))
+    
+    # Plot confusion matrix
+    cm = confusion_matrix(y_true_resnet, y_pred_resnet, labels=le.classes_)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='cividis')
+    plt.title('ResNet-50 Zero-Shot Confusion Matrix')
+    plt.xlabel('Predicted Label')
+    plt.ylabel('True Label')
+    plt.show()
