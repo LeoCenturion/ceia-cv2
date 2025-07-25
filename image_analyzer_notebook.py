@@ -483,7 +483,7 @@ if not df.empty:
     
     # Train XGBoost model
     print("\nTraining XGBoost model with GPU...")
-    model = xgb.XGBClassifier(objective='multi:softmax', num_class=len(le.classes_), use_label_encoder=False, eval_metric='mlogloss', tree_method='gpu_hist')
+    model = xgb.XGBClassifier(objective='multi:softmax', num_class=len(le.classes_), use_label_encoder=False, eval_metric='mlogloss', tree_method='hist', device='cuda')
     model.fit(X_train, y_train)
     
     # Evaluate model
