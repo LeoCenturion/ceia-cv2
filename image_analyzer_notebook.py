@@ -619,8 +619,8 @@ if not df.empty:
     train_dataset = ImageClassificationDataset(train_df, processor, le)
     test_dataset = ImageClassificationDataset(test_df, processor, le)
     
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=os.cpu_count())
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False, num_workers=os.cpu_count())
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=os.cpu_count())
+    test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False, num_workers=os.cpu_count())
     
     # 4. Fine-tune the model
     # Freeze base layers and train only the classifier
@@ -629,7 +629,7 @@ if not df.empty:
         
     optimizer = AdamW(model.classifier.parameters(), lr=5e-4)
     loss_fn = torch.nn.CrossEntropyLoss()
-    num_epochs = 3
+    num_epochs = 12
 
     print("\n--- Fine-tuning the classification head ---")
     for epoch in range(num_epochs):
