@@ -22,6 +22,7 @@ from pathlib import Path
 from skimage.feature import graycomatrix, graycoprops
 from collections import Counter
 from IPython.display import display
+import copy
 import torch
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForImageClassification
@@ -631,11 +632,18 @@ if not df.empty:
     loss_fn = torch.nn.CrossEntropyLoss()
     num_epochs = 12
 
+    # Early stopping parameters
+    patience = 2
+    best_val_loss = float('inf')
+    epochs_no_improve = 0
+    best_model_weights = None
+
     print("\n--- Fine-tuning the classification head ---")
     for epoch in range(num_epochs):
+        # Training phase
         model.train()
-        total_loss = 0
-        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")
+        total_train_loss = 0
+        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} (Train)")
         for batch in progress_bar:
             inputs, labels = batch
             inputs, labels = inputs.to(device), labels.to(device)
@@ -645,11 +653,46 @@ if not df.empty:
             loss = loss_fn(outputs.logits, labels)
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
+            total_train_loss += loss.item()
             progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
         
-        avg_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch+1} - Average Training Loss: {avg_loss:.4f}")
+        avg_train_loss = total_train_loss / len(train_loader)
+        print(f"Epoch {epoch+1} - Average Training Loss: {avg_train_loss:.4f}")
+
+        # Validation phase
+        model.eval()
+        total_val_loss = 0
+        with torch.no_grad():
+            val_progress_bar = tqdm(test_loader, desc=f"Epoch {epoch+1}/{num_epochs} (Val)")
+            for batch in val_progress_bar:
+                inputs, labels = batch
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(pixel_values=inputs)
+                loss = loss_fn(outputs.logits, labels)
+                total_val_loss += loss.item()
+                val_progress_bar.set_postfix({'val_loss': f'{loss.item():.4f}'})
+
+        avg_val_loss = total_val_loss / len(test_loader)
+        print(f"Epoch {epoch+1} - Average Validation Loss: {avg_val_loss:.4f}")
+
+        # Early stopping check
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            epochs_no_improve = 0
+            best_model_weights = copy.deepcopy(model.state_dict())
+            print("Validation loss improved. Saving model.")
+        else:
+            epochs_no_improve += 1
+            print(f"Validation loss did not improve. Patience: {epochs_no_improve}/{patience}")
+
+        if epochs_no_improve >= patience:
+            print("Early stopping triggered.")
+            break
+            
+    # Load best model weights before evaluation
+    if best_model_weights:
+        print("Loading best model weights for evaluation.")
+        model.load_state_dict(best_model_weights)
     
     # 5. Evaluate the fine-tuned model
     print("\n--- Evaluating the fine-tuned model ---")
