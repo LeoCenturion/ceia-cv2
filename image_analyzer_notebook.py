@@ -34,6 +34,7 @@ from sklearn.cluster import MiniBatchKMeans
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import shutil
+from finetuning import get_image_paths
 
 # %% [markdown]
 # ## Configuration
@@ -46,18 +47,6 @@ data_dir = './tp1/data/1/dataset-resized'
 # ## Helper Functions
 
 # %%
-def get_image_paths(data_dir: str) -> pd.DataFrame:
-    """Gathers image paths and their categories from the data directory."""
-    records = []
-    for category_dir in Path(data_dir).iterdir():
-        if not category_dir.is_dir():
-            continue
-        category = category_dir.name
-        for image_path in category_dir.iterdir():
-            if image_path.suffix.lower() in ['.png', '.jpg', '.jpeg']:
-                records.append({'path': str(image_path), 'category': category})
-    return pd.DataFrame(records)
-
 def plot_distribution(df: pd.DataFrame, column: str, title: str):
     """Plots the distribution of a given column, grouped by category."""
     plt.figure(figsize=(12, 8))

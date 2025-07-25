@@ -1,5 +1,6 @@
 import os
 import copy
+from pathlib import Path
 import torch
 import pandas as pd
 import numpy as np
@@ -10,8 +11,21 @@ from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 from tqdm.auto import tqdm
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+
+def get_image_paths(data_dir: str) -> pd.DataFrame:
+    """Gathers image paths and their categories from the data directory."""
+    records = []
+    for category_dir in Path(data_dir).iterdir():
+        if not category_dir.is_dir():
+            continue
+        category = category_dir.name
+        for image_path in category_dir.iterdir():
+            if image_path.suffix.lower() in ['.png', '.jpg', '.jpeg']:
+                records.append({'path': str(image_path), 'category': category})
+    return pd.DataFrame(records)
 
 class ImageClassificationDataset(Dataset):
     def __init__(self, df, processor, label_encoder):
@@ -158,3 +172,32 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
     plt.show()
+
+if __name__ == '__main__':
+    # This allows running the fine-tuning script directly.
+    data_dir = './tp1/data/1/dataset-resized'
+    
+    print(f"Loading data from {data_dir}...")
+    df = get_image_paths(data_dir)
+    
+    if df.empty:
+        print("No images found. Exiting.")
+    else:
+        print(f"Found {len(df)} images.")
+        
+        # Create labels and split data
+        le = LabelEncoder()
+        df['category_encoded'] = le.fit_transform(df['category'])
+        
+        train_df, test_df = train_test_split(
+            df,
+            test_size=0.3,
+            random_state=42,
+            stratify=df['category_encoded']
+        )
+        
+        print(f"Train set size: {len(train_df)}")
+        print(f"Test set size: {len(test_df)}")
+        
+        # Run the fine-tuning process
+        run_finetuning(train_df, test_df, le)
