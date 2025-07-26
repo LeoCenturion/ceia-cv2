@@ -54,8 +54,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
     model = AutoModelForImageClassification.from_pretrained(
-        "microsoft/resnet-50", 
-        num_labels=num_labels, 
+        "microsoft/resnet-50",
+        num_labels=num_labels,
         id2label={i: label for i, label in enumerate(le.classes_)},
         label2id={label: i for i, label in enumerate(le.classes_)},
         ignore_mismatched_sizes=True # This allows replacing the head
