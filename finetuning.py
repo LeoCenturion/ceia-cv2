@@ -68,8 +68,9 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     train_dataset = ImageClassificationDataset(train_df, processor, le)
     test_dataset = ImageClassificationDataset(test_df, processor, le)
     
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=os.cpu_count())
-    test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False, num_workers=os.cpu_count())
+    batch_size = 128
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count())
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count())
     
     for param in model.base_model.parameters():
         param.requires_grad = False
@@ -82,7 +83,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     class_weights_tensor = torch.tensor(weights, dtype=torch.float).to(device)
     print(f"Using weights for loss function: {class_weights_tensor.cpu().numpy().round(2)}")
 
-    optimizer = AdamW(model.classifier.parameters(), lr=5e-4)
+    lr = 5e-4
+    optimizer = AdamW(model.classifier.parameters(), lr=lr)
     loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights_tensor)
     num_epochs = 12
 
@@ -148,7 +150,6 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
             print("Early stopping triggered.")
             break
 
-    writer.close()
     # Load best model weights before evaluation
     if best_model_weights:
         print("Loading best model weights for evaluation.")
@@ -186,6 +187,22 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     plt.title('Fine-tuned ResNet-50 Confusion Matrix')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
+    
+    # Log hyperparameters and metrics to TensorBoard
+    hparams = {
+        'lr': lr,
+        'optimizer': 'AdamW',
+        'num_epochs': num_epochs,
+        'patience': patience,
+        'batch_size': batch_size
+    }
+    metrics = {
+        'hparam/accuracy': accuracy,
+        'hparam/best_val_loss': best_val_loss
+    }
+    writer.add_hparams(hparams, metrics)
+    writer.close()
+    
     plt.show()
 
 if __name__ == '__main__':
