@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
+from torchvision import transforms as T
 from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
 from torch.utils.tensorboard import SummaryWriter
@@ -29,10 +30,11 @@ def get_image_paths(data_dir: str) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 class ImageClassificationDataset(Dataset):
-    def __init__(self, df, processor, label_encoder):
+    def __init__(self, df, processor, label_encoder, transform=None):
         self.df = df
         self.processor = processor
         self.label_encoder = label_encoder
+        self.transform = transform
 
     def __len__(self):
         return len(self.df)
@@ -41,6 +43,9 @@ class ImageClassificationDataset(Dataset):
         row = self.df.iloc[idx]
         image_path = row['path']
         image = Image.open(image_path).convert("RGB")
+
+        if self.transform:
+            image = self.transform(image)
         
         inputs = self.processor(images=image, return_tensors="pt")
         pixel_values = inputs['pixel_values'].squeeze(0)
@@ -49,7 +54,49 @@ class ImageClassificationDataset(Dataset):
         
         return pixel_values, label
 
-def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncoder):
+def get_augmentations(strategy: str = 'none'):
+    """Returns a composition of transforms for data augmentation."""
+    if strategy == 'basic':
+        return T.Compose([
+            T.RandomHorizontalFlip(),
+            T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+            T.RandomRotation(10),
+        ])
+    # 'none' or any other value will result in no augmentations
+    return None
+
+def get_classifier_head(name: str, in_features: int, num_labels: int):
+    """Returns a classifier head based on the specified name."""
+    if name == 'simple':
+        return torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(in_features, num_labels)
+        )
+    elif name == 'complex':
+        return torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(in_features, 2048),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(2048, 2048),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(2048, num_labels)
+        )
+    else:
+        raise ValueError(f"Unknown classifier head: {name}")
+
+def get_loss_function(name: str, class_weights=None):
+    """Returns a loss function based on the specified name."""
+    if name == 'cross_entropy':
+        return torch.nn.CrossEntropyLoss(weight=class_weights)
+    else:
+        raise ValueError(f"Unknown loss function: {name}")
+
+
+def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncoder,
+                   head_name: str = 'complex', loss_fn_name: str = 'cross_entropy',
+                   augmentation_strategy: str = 'none'):
     print("Loading ResNet-50 model and replacing classification head...")
     num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
@@ -61,27 +108,20 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         ignore_mismatched_sizes=True # This allows replacing the head
     )
     
-    # Define a new custom classifier head
-    # The classifier from the pre-trained model is a Sequential module.
-    # We access the Linear layer (at index 1) to get its `in_features`.
+    # Get classifier head
     in_features = model.classifier[1].in_features
-    model.classifier = torch.nn.Sequential(
-        torch.nn.Flatten(),
-        torch.nn.Linear(in_features, 2048),
-        torch.nn.ReLU(),
-        torch.nn.Dropout(0.5),
-        torch.nn.Linear(2048, 2048),
-        torch.nn.ReLU(),
-        torch.nn.Dropout(0.5),
-        torch.nn.Linear(2048, num_labels)
-    )
+    model.classifier = get_classifier_head(head_name, in_features, num_labels)
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     print(f"Model loaded on {device}.")
     
-    train_dataset = ImageClassificationDataset(train_df, processor, le)
-    test_dataset = ImageClassificationDataset(test_df, processor, le)
+    # Get augmentations
+    train_transforms = get_augmentations(augmentation_strategy)
+    # Note: No augmentations on test set, which is standard practice.
+    
+    train_dataset = ImageClassificationDataset(train_df, processor, le, transform=train_transforms)
+    test_dataset = ImageClassificationDataset(test_df, processor, le, transform=None)
     
     batch_size = 128
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count())
@@ -100,7 +140,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
 
     lr = 5e-4
     optimizer = AdamW(model.classifier.parameters(), lr=lr)
-    loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights_tensor)
+    loss_fn = get_loss_function(loss_fn_name, class_weights=class_weights_tensor)
     num_epochs = 12
 
     # Early stopping parameters
@@ -229,7 +269,10 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         'optimizer': 'AdamW',
         'num_epochs': num_epochs,
         'patience': patience,
-        'batch_size': batch_size
+        'batch_size': batch_size,
+        'head': head_name,
+        'loss_function': loss_fn_name,
+        'augmentation': augmentation_strategy
     }
     metrics = {
         'hparam/accuracy': accuracy,
@@ -273,4 +316,11 @@ if __name__ == '__main__':
         print(f"Test set size: {len(test_df)}")
         
         # Run the fine-tuning process
-        run_finetuning(train_df, test_df, le)
+        run_finetuning(
+            train_df, 
+            test_df, 
+            le,
+            head_name='complex',
+            loss_fn_name='cross_entropy',
+            augmentation_strategy='basic'
+        )

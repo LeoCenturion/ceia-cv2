@@ -564,4 +564,11 @@ if not df.empty:
     train_df = all_features_df.loc[X_train.index]
     test_df = all_features_df.loc[X_test.index]
     
-    run_finetuning(train_df, test_df, le)
+    run_finetuning(
+        train_df, 
+        test_df, 
+        le, 
+        head_name='complex', 
+        loss_fn_name='cross_entropy', 
+        augmentation_strategy='none'
+    )
