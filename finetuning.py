@@ -9,6 +9,7 @@ import seaborn as sns
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
+from torch.utils.tensorboard import SummaryWriter
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
@@ -91,6 +92,9 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     epochs_no_improve = 0
     best_model_weights = None
 
+    # Instantiate TensorBoard writer
+    writer = SummaryWriter()
+
     print("\n--- Fine-tuning the classification head ---")
     for epoch in range(num_epochs):
         # Training phase
@@ -111,6 +115,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
 
         avg_train_loss = total_train_loss / len(train_loader)
         print(f"Epoch {epoch+1} - Average Training Loss: {avg_train_loss:.4f}")
+        writer.add_scalar('Loss/train', avg_train_loss, epoch)
 
         # Validation phase
         model.eval()
@@ -127,6 +132,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
 
         avg_val_loss = total_val_loss / len(test_loader)
         print(f"Epoch {epoch+1} - Average Validation Loss: {avg_val_loss:.4f}")
+        writer.add_scalar('Loss/validation', avg_val_loss, epoch)
 
         # Early stopping check
         if avg_val_loss < best_val_loss:
@@ -142,6 +148,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
             print("Early stopping triggered.")
             break
 
+    writer.close()
     # Load best model weights before evaluation
     if best_model_weights:
         print("Loading best model weights for evaluation.")
