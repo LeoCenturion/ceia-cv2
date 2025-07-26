@@ -62,7 +62,7 @@ def get_augmentations(strategy: str = 'none'):
             T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
             T.RandomRotation(10),
         ])
-    elif strategy == 'advanced':
+    elif strategy ==  'Alalibo et all':
         # Corresponds to: rotation [-45 45], scaling [1 2], translation [-10 10], reflection.
         # Assuming 10px translation on a 224x224 image and horizontal reflection.
         return T.Compose([
@@ -80,7 +80,7 @@ def get_classifier_head(name: str, in_features: int, num_labels: int):
             torch.nn.Flatten(),
             torch.nn.Linear(in_features, num_labels)
         )
-    elif name == 'complex':
+    elif name == 'Alalibo et all':
         return torch.nn.Sequential(
             torch.nn.Flatten(),
             torch.nn.Linear(in_features, 2048),
@@ -163,9 +163,9 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     writer = SummaryWriter()
 
     # Log configuration details to TensorBoard
-    writer.add_text('Configuration/Model Architecture', '```\n' + str(model) + '\n```')
-    writer.add_text('Configuration/Preprocessing', '```\n' + str(processor) + '\n```')
-    writer.add_text('Configuration/Loss Function', '```\n' + str(loss_fn) + '\n```')
+    # writer.add_text('Configuration/Model Architecture', '```\n' + str(model) + '\n```')
+    # writer.add_text('Configuration/Preprocessing', '```\n' + str(processor) + '\n```')
+    # writer.add_text('Configuration/Loss Function', '```\n' + str(loss_fn) + '\n```')
 
     print("\n--- Fine-tuning the classification head ---")
     for epoch in range(num_epochs):
@@ -330,7 +330,7 @@ if __name__ == '__main__':
             train_df, 
             test_df, 
             le,
-            head_name='complex',
-            loss_fn_name='cross_entropy',
-            augmentation_strategy='basic'
+            head_name='Alalibo et all',
+            loss_fn_name='cross_entropy_weighted',
+            augmentation_strategy='Alalibo et al'
         )
