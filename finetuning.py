@@ -14,7 +14,7 @@ from transformers import AutoImageProcessor, AutoModelForImageClassification
 from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, f1_score
 
 def get_image_paths(data_dir: str) -> pd.DataFrame:
     """Gathers image paths and their categories from the data directory."""
@@ -176,11 +176,16 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     y_pred_resnet_tuned = all_preds
 
     accuracy = accuracy_score(y_true_resnet_tuned, y_pred_resnet_tuned)
+    f1_weighted = f1_score(y_true_resnet_tuned, y_pred_resnet_tuned, average='weighted')
     print(f"Fine-tuned ResNet-50 Accuracy: {accuracy:.4f}")
+    print(f"Fine-tuned ResNet-50 F1-Score (Weighted): {f1_weighted:.4f}")
 
     print("\nClassification Report:")
     report = classification_report(y_true_resnet_tuned, y_pred_resnet_tuned, target_names=le.classes_)
     print(report)
+
+    # Log classification report to TensorBoard as text
+    writer.add_text('Evaluation/Classification Report', '```\n' + report + '\n```')
 
     # Save the report to a file
     report_path = 'classification_report.txt'
@@ -189,11 +194,14 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     print(f"Classification report saved to {report_path}")
 
     cm = confusion_matrix(y_true_resnet_tuned, y_pred_resnet_tuned)
-    plt.figure(figsize=(10, 8))
+    fig = plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='cividis')
     plt.title('Fine-tuned ResNet-50 Confusion Matrix')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
+    
+    # Log confusion matrix figure to TensorBoard
+    writer.add_figure('Evaluation/Confusion Matrix', fig)
     
     # Log hyperparameters and metrics to TensorBoard
     hparams = {
@@ -205,6 +213,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     }
     metrics = {
         'hparam/accuracy': accuracy,
+        'hparam/f1_score_weighted': f1_weighted,
         'hparam/best_val_loss': best_val_loss
     }
     writer.add_hparams(hparams, metrics)
