@@ -62,7 +62,9 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     )
     
     # Define a new custom classifier head
-    in_features = model.classifier.in_features
+    # The classifier from the pre-trained model is a Sequential module.
+    # We access the Linear layer (at index 1) to get its `in_features`.
+    in_features = model.classifier[1].in_features
     model.classifier = torch.nn.Sequential(
         torch.nn.Linear(in_features, 2048),
         torch.nn.ReLU(),
