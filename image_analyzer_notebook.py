@@ -568,7 +568,7 @@ if not df.empty:
         train_df, 
         test_df, 
         le, 
-        head_name='complex', 
+        head_name='Alalibo et all', 
         loss_fn_name='cross_entropy', 
         augmentation_strategy='none'
     )
