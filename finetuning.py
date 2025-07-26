@@ -72,7 +72,7 @@ def get_classifier_head(name: str, in_features: int, num_labels: int):
             torch.nn.Flatten(),
             torch.nn.Linear(in_features, num_labels)
         )
-    elif name == 'complex':
+    elif name == 'Alalibo et all':
         return torch.nn.Sequential(
             torch.nn.Flatten(),
             torch.nn.Linear(in_features, 2048),
@@ -88,8 +88,10 @@ def get_classifier_head(name: str, in_features: int, num_labels: int):
 
 def get_loss_function(name: str, class_weights=None):
     """Returns a loss function based on the specified name."""
-    if name == 'cross_entropy':
+    if name == 'cross_entropy_weighted':
         return torch.nn.CrossEntropyLoss(weight=class_weights)
+    if name == 'cross_entropy':
+        return torch.nn.CrossEntropyLoss()
     else:
         raise ValueError(f"Unknown loss function: {name}")
 
