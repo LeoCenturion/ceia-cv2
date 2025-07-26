@@ -61,6 +61,18 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         ignore_mismatched_sizes=True # This allows replacing the head
     )
     
+    # Define a new custom classifier head
+    in_features = model.classifier.in_features
+    model.classifier = torch.nn.Sequential(
+        torch.nn.Linear(in_features, 2048),
+        torch.nn.ReLU(),
+        torch.nn.Dropout(0.5),
+        torch.nn.Linear(2048, 2048),
+        torch.nn.ReLU(),
+        torch.nn.Dropout(0.5),
+        torch.nn.Linear(2048, num_labels)
+    )
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     print(f"Model loaded on {device}.")
