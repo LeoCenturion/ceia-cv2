@@ -70,8 +70,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         torch.nn.Linear(2048, 2048),
         torch.nn.ReLU(),
         torch.nn.Dropout(0.5),
-        torch.nn.Linear(2048, num_labels),
-        torch.nn.LogSoftmax(dim=1)
+        torch.nn.Linear(2048, num_labels)
     )
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -98,7 +97,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
 
     lr = 5e-4
     optimizer = AdamW(model.classifier.parameters(), lr=lr)
-    loss_fn = torch.nn.NLLLoss(weight=class_weights_tensor)
+    loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights_tensor)
     num_epochs = 12
 
     # Early stopping parameters
