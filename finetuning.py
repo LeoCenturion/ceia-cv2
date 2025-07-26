@@ -112,6 +112,11 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     # Instantiate TensorBoard writer
     writer = SummaryWriter()
 
+    # Log configuration details to TensorBoard
+    writer.add_text('Configuration/Model Architecture', '```\n' + str(model) + '\n```')
+    writer.add_text('Configuration/Preprocessing', '```\n' + str(processor) + '\n```')
+    writer.add_text('Configuration/Loss Function', '```\n' + str(loss_fn) + '\n```')
+
     print("\n--- Fine-tuning the classification head ---")
     for epoch in range(num_epochs):
         # Training phase
