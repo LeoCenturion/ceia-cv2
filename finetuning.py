@@ -72,9 +72,17 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     
     for param in model.base_model.parameters():
         param.requires_grad = False
-        
+
+    print("Calculating class weights to handle imbalance...")
+    class_counts = train_df['category'].value_counts()
+    num_samples = len(train_df)
+    num_classes = len(le.classes_)
+    weights = [num_samples / (num_classes * class_counts[cls]) for cls in le.classes_]
+    class_weights_tensor = torch.tensor(weights, dtype=torch.float).to(device)
+    print(f"Using weights for loss function: {class_weights_tensor.cpu().numpy().round(2)}")
+
     optimizer = AdamW(model.classifier.parameters(), lr=5e-4)
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights_tensor)
     num_epochs = 12
 
     # Early stopping parameters
@@ -100,7 +108,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
             optimizer.step()
             total_train_loss += loss.item()
             progress_bar.set_postfix({'loss': f'{loss.item():.4f}'})
-        
+
         avg_train_loss = total_train_loss / len(train_loader)
         print(f"Epoch {epoch+1} - Average Training Loss: {avg_train_loss:.4f}")
 
@@ -133,12 +141,12 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         if epochs_no_improve >= patience:
             print("Early stopping triggered.")
             break
-            
+
     # Load best model weights before evaluation
     if best_model_weights:
         print("Loading best model weights for evaluation.")
         model.load_state_dict(best_model_weights)
-    
+
     # 5. Evaluate the fine-tuned model
     print("\n--- Evaluating the fine-tuned model ---")
     model.eval()
@@ -149,10 +157,10 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         for batch in tqdm(test_loader, desc="Evaluating"):
             inputs, labels = batch
             inputs = inputs.to(device)
-            
+
             outputs = model(pixel_values=inputs)
             preds = torch.argmax(outputs.logits, dim=1)
-            
+
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.numpy())
 
