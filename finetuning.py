@@ -66,6 +66,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     # We access the Linear layer (at index 1) to get its `in_features`.
     in_features = model.classifier[1].in_features
     model.classifier = torch.nn.Sequential(
+        torch.nn.Flatten(),
         torch.nn.Linear(in_features, 2048),
         torch.nn.ReLU(),
         torch.nn.Dropout(0.5),
