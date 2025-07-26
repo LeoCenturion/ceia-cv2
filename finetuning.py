@@ -179,7 +179,14 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     print(f"Fine-tuned ResNet-50 Accuracy: {accuracy:.4f}")
 
     print("\nClassification Report:")
-    print(classification_report(y_true_resnet_tuned, y_pred_resnet_tuned, target_names=le.classes_))
+    report = classification_report(y_true_resnet_tuned, y_pred_resnet_tuned, target_names=le.classes_)
+    print(report)
+
+    # Save the report to a file
+    report_path = 'classification_report.txt'
+    with open(report_path, 'w') as f:
+        f.write(report)
+    print(f"Classification report saved to {report_path}")
 
     cm = confusion_matrix(y_true_resnet_tuned, y_pred_resnet_tuned)
     plt.figure(figsize=(10, 8))
@@ -202,6 +209,11 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     }
     writer.add_hparams(hparams, metrics)
     writer.close()
+    
+    # Save the confusion matrix plot
+    cm_path = 'confusion_matrix.png'
+    plt.savefig(cm_path, bbox_inches='tight')
+    print(f"Confusion matrix saved to {cm_path}")
     
     plt.show()
 
