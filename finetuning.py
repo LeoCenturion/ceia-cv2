@@ -62,6 +62,14 @@ def get_augmentations(strategy: str = 'none'):
             T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
             T.RandomRotation(10),
         ])
+    elif strategy == 'advanced':
+        # Corresponds to: rotation [-45 45], scaling [1 2], translation [-10 10], reflection.
+        # Assuming 10px translation on a 224x224 image and horizontal reflection.
+        return T.Compose([
+            T.RandomHorizontalFlip(),
+            # Using RandomAffine to combine rotation, translation, and scaling
+            T.RandomAffine(degrees=45, translate=(10/224, 10/224), scale=(1.0, 2.0)),
+        ])
     # 'none' or any other value will result in no augmentations
     return None
 
@@ -72,7 +80,7 @@ def get_classifier_head(name: str, in_features: int, num_labels: int):
             torch.nn.Flatten(),
             torch.nn.Linear(in_features, num_labels)
         )
-    elif name == 'Alalibo et all':
+    elif name == 'complex':
         return torch.nn.Sequential(
             torch.nn.Flatten(),
             torch.nn.Linear(in_features, 2048),
