@@ -47,16 +47,7 @@ class ImageClassificationDataset(Dataset):
         image = Image.open(image_path).convert("RGB")
 
         if self.transform:
-            # Albumentations transforms expect and return numpy arrays/tensors
-            if isinstance(self.transform, A.Compose):
-                image_np = np.array(image)
-                transformed = self.transform(image=image_np)
-                pixel_values = transformed['image']
-            # Torchvision transforms expect and return PIL images
-            else:
-                image = self.transform(image)
-                inputs = self.processor(images=image, return_tensors="pt")
-                pixel_values = inputs['pixel_values'].squeeze(0)
+            pixel_values = self.transform(image)
         else:
             # Default processing if no transforms are provided
             inputs = self.processor(images=image, return_tensors="pt")
@@ -66,24 +57,37 @@ class ImageClassificationDataset(Dataset):
         
         return pixel_values, label
 
+# A wrapper to make Albumentations transforms compatible with the unified interface
+class AlbumentationsTransform:
+    def __init__(self, transform):
+        self.transform = transform
+
+    def __call__(self, img):
+        img = np.array(img)
+        return self.transform(image=img)['image']
+
 def get_augmentations(strategy: str = 'none'):
-    """Returns a composition of transforms for data augmentation."""
+    """Returns a unified transform callable that takes a PIL image and returns a tensor."""
     if strategy == 'basic':
         return T.Compose([
+            T.Resize((224, 224)),
             T.RandomHorizontalFlip(),
             T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
             T.RandomRotation(10),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
     elif strategy ==  'Alalibo et all':
-        # Corresponds to: rotation [-45 45], scaling [1 2], translation [-10 10], reflection.
-        # Assuming 10px translation on a 224x224 image and horizontal reflection.
         return T.Compose([
+            T.Resize((224, 224)),
             T.RandomHorizontalFlip(),
             # Using RandomAffine to combine rotation, translation, and scaling
             T.RandomAffine(degrees=45, translate=(10/224, 10/224), scale=(1.0, 2.0)),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
     elif strategy == 'albumentations_advanced':
-        return A.Compose([
+        alb_transform = A.Compose([
             A.Resize(224, 224),
             A.HorizontalFlip(p=0.5),
             A.Affine(rotate=(-20, 20), scale=(0.8, 1.2), translate_percent=(0.1, 0.1), p=0.7),
@@ -92,6 +96,7 @@ def get_augmentations(strategy: str = 'none'):
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ToTensorV2()
         ])
+        return AlbumentationsTransform(alb_transform)
     # 'none' or any other value will result in no augmentations
     return None
 
