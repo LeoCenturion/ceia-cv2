@@ -133,7 +133,8 @@ def get_loss_function(name: str, class_weights=None):
 
 def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncoder,
                    head_name: str = 'complex', loss_fn_name: str = 'cross_entropy',
-                   augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none'):
+                   augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none',
+                   balancing_target_samples: int = None):
     print("Loading ResNet-50 model and replacing classification head...")
     num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
@@ -159,24 +160,33 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     
     # Oversample the training data to balance classes if an augmentation strategy is provided
     if class_balancing_strategy == 'oversampling':
-        print("Oversampling training data to balance classes...")
+        print("Balancing training data by resampling...")
         class_counts = train_df['category'].value_counts()
-        max_size = class_counts.max()
-        print(f"Target samples per class: {max_size}")
 
-        oversampled_dfs = [train_df]
-        for class_name, count in class_counts.items():
-            if count < max_size:
-                n_samples_to_add = max_size - count
-                class_df = train_df[train_df['category'] == class_name]
-                samples_to_add = class_df.sample(n=n_samples_to_add, replace=True, random_state=42)
-                oversampled_dfs.append(samples_to_add)
-
+        if balancing_target_samples:
+            target_size = balancing_target_samples
+        else:
+            # Default behavior: oversample to the size of the largest class
+            target_size = class_counts.max()
+        
+        print(f"Target samples per class: {target_size}")
+        
+        balanced_dfs = []
+        for class_name in class_counts.index:
+            class_df = train_df[train_df['category'] == class_name]
+            # Use resampling to either oversample or undersample to the target size
+            resampled_df = class_df.sample(
+                n=target_size, 
+                replace=(len(class_df) < target_size), 
+                random_state=42
+            )
+            balanced_dfs.append(resampled_df)
+        
         # Concatenate and shuffle the new balanced DataFrame
-        train_df = pd.concat(oversampled_dfs, ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
+        train_df = pd.concat(balanced_dfs, ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
         print(f"New balanced training set size: {len(train_df)}")
     else:
-        print("Skipping oversampling because no augmentation strategy is selected.")
+        print("Skipping class balancing.")
     
     train_dataset = ImageClassificationDataset(train_df, processor, le, transform=train_transforms)
     test_dataset = ImageClassificationDataset(test_df, processor, le, transform=None)
@@ -333,7 +343,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         'head': head_name,
         'loss_function': loss_fn_name,
         'augmentation': augmentation_strategy,
-        'class_balancing': class_balancing_strategy
+        'class_balancing': class_balancing_strategy,
+        'balancing_target_samples': balancing_target_samples
     }
     metrics = {
         'hparam/accuracy': accuracy,
@@ -414,4 +425,17 @@ if __name__ == '__main__':
             loss_fn_name='cross_entropy_weighted',
             augmentation_strategy='Alalibo et all',
             class_balancing_strategy = 'none'
+        )
+
+        # New run to demonstrate configurable resampling
+        print("\n--- Running with configurable class balancing ---")
+        run_finetuning(
+            train_df,
+            test_df,
+            le,
+            head_name='simple',
+            loss_fn_name='cross_entropy_weighted',
+            augmentation_strategy='basic',
+            class_balancing_strategy='oversampling',
+            balancing_target_samples=600
         )
