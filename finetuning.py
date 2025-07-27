@@ -157,6 +157,27 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     train_transforms = get_augmentations(augmentation_strategy)
     # Note: No augmentations on test set, which is standard practice.
     
+    # Oversample the training data to balance classes if an augmentation strategy is provided
+    if augmentation_strategy != 'none':
+        print("Oversampling training data to balance classes...")
+        class_counts = train_df['category'].value_counts()
+        max_size = class_counts.max()
+        print(f"Target samples per class: {max_size}")
+
+        oversampled_dfs = [train_df]
+        for class_name, count in class_counts.items():
+            if count < max_size:
+                n_samples_to_add = max_size - count
+                class_df = train_df[train_df['category'] == class_name]
+                samples_to_add = class_df.sample(n=n_samples_to_add, replace=True, random_state=42)
+                oversampled_dfs.append(samples_to_add)
+        
+        # Concatenate and shuffle the new balanced DataFrame
+        train_df = pd.concat(oversampled_dfs, ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
+        print(f"New balanced training set size: {len(train_df)}")
+    else:
+        print("Skipping oversampling because no augmentation strategy is selected.")
+    
     train_dataset = ImageClassificationDataset(train_df, processor, le, transform=train_transforms)
     test_dataset = ImageClassificationDataset(test_df, processor, le, transform=None)
     
@@ -167,13 +188,15 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     for param in model.base_model.parameters():
         param.requires_grad = False
 
-    print("Calculating class weights to handle imbalance...")
-    class_counts = train_df['category'].value_counts()
-    num_samples = len(train_df)
-    num_classes = len(le.classes_)
-    weights = [num_samples / (num_classes * class_counts[cls]) for cls in le.classes_]
-    class_weights_tensor = torch.tensor(weights, dtype=torch.float).to(device)
-    print(f"Using weights for loss function: {class_weights_tensor.cpu().numpy().round(2)}")
+    class_weights_tensor = None
+    if 'weighted' in loss_fn_name:
+        print("Calculating class weights for the loss function...")
+        class_counts = train_df['category'].value_counts()
+        num_samples = len(train_df)
+        num_classes = len(le.classes_)
+        weights = [num_samples / (num_classes * class_counts[cls]) for cls in le.classes_]
+        class_weights_tensor = torch.tensor(weights, dtype=torch.float).to(device)
+        print(f"Calculated weights: {class_weights_tensor.cpu().numpy().round(2)}")
 
     lr = 5e-4
     optimizer = AdamW(model.classifier.parameters(), lr=lr)
