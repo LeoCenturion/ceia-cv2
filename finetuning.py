@@ -91,7 +91,7 @@ def get_augmentations(strategy: str = 'none'):
             A.Resize(224, 224),
             A.HorizontalFlip(p=0.5),
             A.Affine(rotate=(-20, 20), scale=(0.8, 1.2), translate_percent=(0.1, 0.1), p=0.7),
-            A.RandomResizedCrop(height=224, width=224, scale=(0.5, 1.0), p=0.5),
+            A.RandomResizedCrop(size=(224, 224),height=224, width=224, scale=(0.5, 1.0), p=0.5),
             A.ColorJitter(hue=0.05, saturation=0.1, brightness=0.1, contrast=0.1, p=0.5),
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ToTensorV2()
@@ -133,7 +133,7 @@ def get_loss_function(name: str, class_weights=None):
 
 def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncoder,
                    head_name: str = 'complex', loss_fn_name: str = 'cross_entropy',
-                   augmentation_strategy: str = 'none'):
+                   augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none'):
     print("Loading ResNet-50 model and replacing classification head...")
     num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
@@ -158,7 +158,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     # Note: No augmentations on test set, which is standard practice.
     
     # Oversample the training data to balance classes if an augmentation strategy is provided
-    if augmentation_strategy != 'none':
+    if class_balancing_strategy == 'oversampling':
         print("Oversampling training data to balance classes...")
         class_counts = train_df['category'].value_counts()
         max_size = class_counts.max()
@@ -171,7 +171,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
                 class_df = train_df[train_df['category'] == class_name]
                 samples_to_add = class_df.sample(n=n_samples_to_add, replace=True, random_state=42)
                 oversampled_dfs.append(samples_to_add)
-        
+
         # Concatenate and shuffle the new balanced DataFrame
         train_df = pd.concat(oversampled_dfs, ignore_index=True).sample(frac=1, random_state=42).reset_index(drop=True)
         print(f"New balanced training set size: {len(train_df)}")
@@ -332,7 +332,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         'batch_size': batch_size,
         'head': head_name,
         'loss_function': loss_fn_name,
-        'augmentation': augmentation_strategy
+        'augmentation': augmentation_strategy,
+        'class_balancing': class_balancing_strategy
     }
     metrics = {
         'hparam/accuracy': accuracy,
@@ -347,7 +348,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     plt.savefig(cm_path, bbox_inches='tight')
     print(f"Confusion matrix saved to {cm_path}")
     
-    plt.show()
+    # plt.show()
 
 if __name__ == '__main__':
     # This allows running the fine-tuning script directly.
@@ -360,27 +361,57 @@ if __name__ == '__main__':
         print("No images found. Exiting.")
     else:
         print(f"Found {len(df)} images.")
-        
+
         # Create labels and split data
         le = LabelEncoder()
         df['category_encoded'] = le.fit_transform(df['category'])
-        
+
         train_df, test_df = train_test_split(
             df,
             test_size=0.3,
             random_state=42,
             stratify=df['category_encoded']
         )
-        
+
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
-        
-        # Run the fine-tuning process
+
         run_finetuning(
             train_df, 
             test_df, 
             le,
             head_name='Alalibo et all',
             loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy='albumentations_advanced'
+            augmentation_strategy='albumentations_advanced',
+            class_balancing_strategy = 'oversampling'
+        )
+
+        run_finetuning(
+            train_df, 
+            test_df, 
+            le,
+            head_name='simple',
+            loss_fn_name='cross_entropy_weighted',
+            augmentation_strategy='albumentations_advanced',
+            class_balancing_strategy = 'oversampling'
+        )
+
+        run_finetuning(
+            train_df, 
+            test_df, 
+            le,
+            head_name='Alalibo et all',
+            loss_fn_name='cross_entropy_weighted',
+            augmentation_strategy='Alalibo et all',
+            class_balancing_strategy = 'oversampling'
+        )
+
+        run_finetuning(
+            train_df, 
+            test_df, 
+            le,
+            head_name='Alalibo et all',
+            loss_fn_name='cross_entropy_weighted',
+            augmentation_strategy='Alalibo et all',
+            class_balancing_strategy = 'none'
         )
