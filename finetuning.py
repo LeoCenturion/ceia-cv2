@@ -14,6 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
 from torch.utils.tensorboard import SummaryWriter
 from transformers import AutoImageProcessor, AutoModelForImageClassification, TrainingArguments, Trainer, EarlyStoppingCallback
+from transformers.integrations import TensorBoardCallback
 from transformers.trainer_utils import EvalPrediction
 from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
@@ -284,27 +285,33 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
 
-    # The Trainer creates a specific log directory, so we grab its path from the state
-    writer = SummaryWriter(log_dir=trainer.state.log_dir)
-    writer.add_text('Evaluation/Classification Report', '```\n' + report + '\n```')
-    writer.add_figure('Evaluation/Confusion Matrix', fig)
+    # The Trainer creates a specific log directory, so we grab its writer from the callbacks
+    writer = None
+    for callback in trainer.callback_handler.callbacks:
+        if isinstance(callback, TensorBoardCallback):
+            writer = callback.tb_writer
+            break
+    
+    if writer:
+        writer.add_text('Evaluation/Classification Report', '```\n' + report + '\n```')
+        writer.add_figure('Evaluation/Confusion Matrix', fig)
 
-    hparams = {
-        'lr': lr,
-        'batch_size': batch_size,
-        'head': head_name,
-        'loss_function': loss_fn_name,
-        'augmentation': augmentation_strategy,
-        'class_balancing': class_balancing_strategy,
-        'balancing_target_samples': balancing_target_samples
-    }
-    metrics = {
-        'hparam/accuracy': accuracy,
-        'hparam/f1_score_weighted': f1_weighted,
-        'hparam/best_val_loss': trainer.state.best_metric
-    }
-    writer.add_hparams(hparams, metrics)
-    writer.close()
+        hparams = {
+            'lr': lr,
+            'batch_size': batch_size,
+            'head': head_name,
+            'loss_function': loss_fn_name,
+            'augmentation': augmentation_strategy,
+            'class_balancing': class_balancing_strategy,
+            'balancing_target_samples': balancing_target_samples
+        }
+        metrics = {
+            'hparam/accuracy': accuracy,
+            'hparam/f1_score_weighted': f1_weighted,
+            'hparam/best_val_loss': trainer.state.best_metric
+        }
+        writer.add_hparams(hparams, metrics)
+        # The writer is closed by the trainer.
     
     # Save the confusion matrix plot
     cm_path = 'confusion_matrix.png'
