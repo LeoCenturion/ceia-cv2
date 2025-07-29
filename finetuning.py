@@ -209,7 +209,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
 
     training_args = TrainingArguments(
         output_dir='./results',
-        num_train_epochs=24,
+        num_train_epochs=5,
         learning_rate=lr,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
