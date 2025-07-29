@@ -134,7 +134,7 @@ def get_loss_function(name: str, class_weights=None):
 def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncoder,
                    head_name: str = 'complex', loss_fn_name: str = 'cross_entropy',
                    augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none',
-                   balancing_target_samples: int = None):
+                   balancing_target_samples: int = None, lr = 5e-4):
     print("Loading ResNet-50 model and replacing classification head...")
     num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
@@ -208,13 +208,12 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         class_weights_tensor = torch.tensor(weights, dtype=torch.float).to(device)
         print(f"Calculated weights: {class_weights_tensor.cpu().numpy().round(2)}")
 
-    lr = 5e-4
     optimizer = AdamW(model.classifier.parameters(), lr=lr)
     loss_fn = get_loss_function(loss_fn_name, class_weights=class_weights_tensor)
-    num_epochs = 12
+    num_epochs = 24
 
     # Early stopping parameters
-    patience = 2
+    patience = 5
     best_val_loss = float('inf')
     epochs_no_improve = 0
     best_model_weights = None
@@ -226,7 +225,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     # writer.add_text('Configuration/Model Architecture', '```\n' + str(model) + '\n```')
     # writer.add_text('Configuration/Preprocessing', '```\n' + str(processor) + '\n```')
     # writer.add_text('Configuration/Loss Function', '```\n' + str(loss_fn) + '\n```')
-
+    
     print("\n--- Fine-tuning the classification head ---")
     for epoch in range(num_epochs):
         # Training phase
@@ -393,49 +392,10 @@ if __name__ == '__main__':
             le,
             head_name='Alalibo et all',
             loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy='albumentations_advanced',
-            class_balancing_strategy = 'oversampling'
-        )
-
-        run_finetuning(
-            train_df, 
-            test_df, 
-            le,
-            head_name='simple',
-            loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy='albumentations_advanced',
-            class_balancing_strategy = 'oversampling'
-        )
-
-        run_finetuning(
-            train_df, 
-            test_df, 
-            le,
-            head_name='Alalibo et all',
-            loss_fn_name='cross_entropy_weighted',
             augmentation_strategy='Alalibo et all',
-            class_balancing_strategy = 'oversampling'
+            class_balancing_strategy = 'oversampling',
+            balancing_target_samples=600,
+            lr = 1e-4
         )
 
-        run_finetuning(
-            train_df, 
-            test_df, 
-            le,
-            head_name='Alalibo et all',
-            loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy='Alalibo et all',
-            class_balancing_strategy = 'none'
-        )
 
-        # New run to demonstrate configurable resampling
-        print("\n--- Running with configurable class balancing ---")
-        run_finetuning(
-            train_df,
-            test_df,
-            le,
-            head_name='simple',
-            loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy='basic',
-            class_balancing_strategy='oversampling',
-            balancing_target_samples=600
-        )
