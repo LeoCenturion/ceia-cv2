@@ -13,7 +13,7 @@ from torchvision import transforms as T
 from torch.utils.data import Dataset, DataLoader
 from torch.optim import AdamW
 from torch.utils.tensorboard import SummaryWriter
-from transformers import AutoImageProcessor, AutoModelForImageClassification, TrainingArguments, Trainer
+from transformers import AutoImageProcessor, AutoModelForImageClassification, TrainingArguments, Trainer, EarlyStoppingCallback
 from transformers.trainer_utils import EvalPrediction
 from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
@@ -223,7 +223,6 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         greater_is_better=False,
         report_to="tensorboard",
         save_total_limit=1,
-        early_stopping_patience=5,
     )
 
     class_weights_tensor = None
@@ -242,12 +241,15 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         TrainerClass = WeightedLossTrainer
         trainer_kwargs['class_weights'] = class_weights_tensor
     
+    early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=5)
+
     trainer = TrainerClass(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
         compute_metrics=compute_metrics,
+        callbacks=[early_stopping_callback],
         **trainer_kwargs,
     )
     
