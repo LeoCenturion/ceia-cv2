@@ -214,7 +214,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         dataloader_num_workers=os.cpu_count(),
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         logging_dir='./logs',
         logging_strategy="epoch",
