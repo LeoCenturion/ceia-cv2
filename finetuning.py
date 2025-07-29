@@ -216,7 +216,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         dataloader_num_workers=os.cpu_count(),
         eval_strategy="epoch",
         save_strategy="epoch",
-        logging_dir='./logs',
+        logging_dir='./runs',
         logging_strategy="epoch",
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
@@ -323,10 +323,10 @@ if __name__ == '__main__':
             le,
             head_name='Alalibo et all',
             loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy='Alalibo et all',
+            augmentation_strategy='albumentation_advanced',
             class_balancing_strategy = 'oversampling',
             balancing_target_samples=600,
-            lr = 1e-4
+            lr = 5e-4
         )
 
 
