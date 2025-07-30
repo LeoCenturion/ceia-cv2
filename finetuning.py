@@ -222,7 +222,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        report_to="tensorboard",
+        report_to="none",
         save_total_limit=1,
     )
 
@@ -243,6 +243,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         trainer_kwargs['class_weights'] = class_weights_tensor
     
     early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=5)
+    tensorboard_callback = TensorBoardCallback()
 
     trainer = TrainerClass(
         model=model,
@@ -250,7 +251,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
         compute_metrics=compute_metrics,
-        callbacks=[early_stopping_callback],
+        callbacks=[early_stopping_callback, tensorboard_callback],
         **trainer_kwargs,
     )
     
@@ -285,12 +286,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
 
-    # The Trainer creates a specific log directory, so we grab its writer from the callbacks
-    writer = None
-    for callback in trainer.callback_handler.callbacks:
-        if isinstance(callback, TensorBoardCallback):
-            writer = callback.tb_writer
-            break
+    # The TensorBoard callback is managed manually, so we can access its writer directly.
+    writer = tensorboard_callback.tb_writer
     
     if writer:
         writer.add_text('Evaluation/Classification Report', '```\n' + report + '\n```')
