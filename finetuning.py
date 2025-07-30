@@ -248,9 +248,10 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         
         TrainerClass = WeightedLossTrainer
         trainer_kwargs['class_weights'] = class_weights_tensor
-    
+
     early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=5)
-    tensorboard_callback = TensorBoardCallback()
+    writer = SummaryWriter()
+    tensorboard_callback = TensorBoardCallback(tb_writer=writer)
 
     trainer = TrainerClass(
         model=model,
@@ -294,8 +295,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     plt.ylabel('True Label')
 
     # The TensorBoard callback is managed manually, so we can access its writer directly.
-    writer = tensorboard_callback.tb_writer
-    
+
     if writer:
         writer.add_text('Evaluation/Classification Report', '```\n' + report + '\n```')
         writer.add_figure('Evaluation/Confusion Matrix', fig)
@@ -316,7 +316,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         }
         writer.add_hparams(hparams, metrics)
         # The writer is closed by the trainer.
-    
+    writer.close()
     # Save the confusion matrix plot
     cm_path = 'confusion_matrix.png'
     plt.savefig(cm_path, bbox_inches='tight')
