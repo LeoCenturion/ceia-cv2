@@ -1,6 +1,8 @@
 import os
 import copy
+import socket
 from pathlib import Path
+from datetime import datetime
 import torch
 import pandas as pd
 import numpy as np
@@ -208,6 +210,11 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     for param in model.base_model.parameters():
         param.requires_grad = False
 
+    # Create a timestamped logging directory like Jul27_14-29-08_fedora
+    current_time = datetime.now().strftime('%b%d_%H-%M-%S')
+    hostname = socket.gethostname().split('.')[0]
+    log_dir = f"./runs/{current_time}_{hostname}"
+
     training_args = TrainingArguments(
         output_dir='./results',
         num_train_epochs=5,
@@ -217,7 +224,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         dataloader_num_workers=os.cpu_count(),
         eval_strategy="epoch",
         save_strategy="epoch",
-        logging_dir='./runs',
+        logging_dir=log_dir,
         logging_strategy="epoch",
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
