@@ -307,7 +307,9 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
             'loss_function': loss_fn_name,
             'augmentation': augmentation_strategy,
             'class_balancing': class_balancing_strategy,
-            'balancing_target_samples': balancing_target_samples
+            'balancing_target_samples': balancing_target_samples,
+            'patience': early_stopping_callback.early_stopping_patience,
+            'last_epoch': trainer.state.epoch
         }
         metrics = {
             'hparam/accuracy': accuracy,
