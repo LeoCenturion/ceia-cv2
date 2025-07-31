@@ -58,9 +58,9 @@ class ImageClassificationDataset(Dataset):
             # Default processing if no transforms are provided
             inputs = self.processor(images=image, return_tensors="pt")
             pixel_values = inputs['pixel_values'].squeeze(0)
-        
+
         label = self.label_encoder.transform([row['category']])[0]
-        
+
         return {'pixel_values': pixel_values, 'labels': label}
 
 # A wrapper to make Albumentations transforms compatible with the unified interface
@@ -87,7 +87,6 @@ def get_augmentations(strategy: str = 'none'):
         return T.Compose([
             T.Resize((224, 224)),
             T.RandomHorizontalFlip(),
-            # Using RandomAffine to combine rotation, translation, and scaling
             T.RandomAffine(degrees=45, translate=(10/224, 10/224), scale=(1.0, 2.0)),
             T.ToTensor(),
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -97,7 +96,7 @@ def get_augmentations(strategy: str = 'none'):
             A.Resize(224, 224),
             A.HorizontalFlip(p=0.5),
             A.Affine(rotate=(-20, 20), scale=(0.8, 1.2), translate_percent=(0.1, 0.1), p=0.7),
-            A.RandomResizedCrop(size=(224, 224),height=224, width=224, scale=(0.5, 1.0), p=0.5),
+            A.RandomResizedCrop(size=(224, 224), scale=(0.5, 1.0), p=0.5),
             A.ColorJitter(hue=0.05, saturation=0.1, brightness=0.1, contrast=0.1, p=0.5),
             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ToTensorV2()
@@ -149,6 +148,7 @@ class WeightedLossTrainer(Trainer):
 
 def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncoder,
                    head_name: str = 'complex', loss_fn_name: str = 'cross_entropy',
+                   loss_fn_weights : list[float] = [],
                    augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none',
                    balancing_target_samples: int = None, lr = 5e-4):
     print("Loading ResNet-50 model and replacing classification head...")
@@ -184,9 +184,9 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         else:
             # Default behavior: oversample to the size of the largest class
             target_size = class_counts.max()
-        
+
         print(f"Target samples per class: {target_size}")
-        
+
         balanced_dfs = []
         for class_name in class_counts.index:
             class_df = train_df[train_df['category'] == class_name]
@@ -240,14 +240,15 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     trainer_kwargs = {}
 
     if 'weighted' in loss_fn_name:
-        print("Calculating class weights for the loss function...")
         class_counts = train_df['category'].value_counts()
         num_samples = len(train_df)
         num_classes = len(le.classes_)
-        weights = [num_samples / (num_classes * class_counts[cls]) for cls in le.classes_]
-        class_weights_tensor = torch.tensor(weights, dtype=torch.float).to(device)
-        print(f"Calculated weights: {class_weights_tensor.cpu().numpy().round(2)}")
-        
+        if len(loss_fn_weights) == 0:
+            print("Calculating class weights for the loss function...")
+            loss_fn_weights = [num_samples / (num_classes * class_counts[cls]) for cls in le.classes_]
+        class_weights_tensor = torch.tensor(loss_fn_weights, dtype=torch.float).to(device)
+        print(f"Using weights: {class_weights_tensor.cpu().numpy().round(2)}")
+
         TrainerClass = WeightedLossTrainer
         trainer_kwargs['class_weights'] = class_weights_tensor
 
@@ -370,46 +371,9 @@ def objective(trial):
         )
         return accuracy
 
-if __name__ == '__main__':
-    # This allows running the fine-tuning script directly.
-    # data_dir = './tp1/data/1/dataset-resized'
-    
-    # print(f"Loading data from {data_dir}...")
-    # df = get_image_paths(data_dir)
-    
-    # if df.empty:
-    #     print("No images found. Exiting.")
-    # else:
-    #     print(f"Found {len(df)} images.")
-
-    #     # Create labels and split data
-    #     le = LabelEncoder()
-    #     df['category_encoded'] = le.fit_transform(df['category'])
-
-    #     train_df, test_df = train_test_split(
-    #         df,
-    #         test_size=0.3,
-    #         random_state=42,
-    #         stratify=df['category_encoded']
-    #     )
-
-    #     print(f"Train set size: {len(train_df)}")
-    #     print(f"Test set size: {len(test_df)}")
-
-    #     run_finetuning(
-    #         train_df, 
-    #         test_df, 
-    #         le,
-    #         head_name='Alalibo et all',
-    #         loss_fn_name='cross_entropy_weighted',
-    #         augmentation_strategy='albumentation_advanced',
-    #         class_balancing_strategy = 'oversampling',
-    #         balancing_target_samples=600,
-    #         lr = 3e-4
-    #     )
-
+def hp_search(objective):
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=100, timeout=600)
+    study.optimize(objective, n_trials=100)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
@@ -428,5 +392,42 @@ if __name__ == '__main__':
     # for key, value in trial.params.items():
     #     print("    {}: {}".format(key, value))
 
+if __name__ == '__main__':
+    data_dir = './tp1/data/1/dataset-resized'
 
-    
+    print(f"Loading data from {data_dir}...")
+    df = get_image_paths(data_dir)
+
+    if df.empty:
+        print("No images found. Exiting.")
+    else:
+        print(f"Found {len(df)} images.")
+
+        # Create labels and split data
+        le = LabelEncoder()
+        df['category_encoded'] = le.fit_transform(df['category'])
+
+        train_df, test_df = train_test_split(
+            df,
+            test_size=0.3,
+            random_state=42,
+            stratify=df['category_encoded']
+        )
+
+        print(f"Train set size: {len(train_df)}")
+        print(f"Test set size: {len(test_df)}")
+
+        run_finetuning(
+            train_df,
+            test_df,
+            le,
+            head_name='Alalibo et all',
+            loss_fn_name='cross_entropy_weighted',
+            loss_fn_weights=[1.04, 0.84, 1.03, 0.71, 0.87, 3.07],
+            augmentation_strategy='albumentation_advanced',
+            class_balancing_strategy = 'oversampling',
+            lr = 1e-4
+        )
+
+
+
