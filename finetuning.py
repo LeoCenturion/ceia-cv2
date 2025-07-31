@@ -123,6 +123,14 @@ def get_classifier_head(name: str, in_features: int, num_labels: int):
             torch.nn.Dropout(0.5),
             torch.nn.Linear(2048, num_labels)
         )
+    elif name == 'intermediate':
+        return torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(in_features, 512),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(512, num_labels)
+        )
     else:
         raise ValueError(f"Unknown classifier head: {name}")
 
@@ -356,7 +364,7 @@ def objective(trial):
         print(f"Test set size: {len(test_df)}")
 
         augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
-        head = trial.suggest_categorical("head", ['simple', 'Alalibo et all'])
+        head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all'])
         lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
         accuracy = run_finetuning(
             train_df, 
