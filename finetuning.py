@@ -363,8 +363,10 @@ def objective(trial):
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
-        head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all'])
+        # augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
+        augmentation = 'albumentation_advanced'
+        # head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all'])
+        head = 'intermediate'
         lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
         accuracy = run_finetuning(
             train_df, 
@@ -379,9 +381,9 @@ def objective(trial):
         )
         return accuracy
 
-def hp_search(objective):
+def hp_search(objective, n_trials):
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
@@ -391,14 +393,14 @@ def hp_search(objective):
     print("  Number of pruned trials: ", len(pruned_trials))
     print("  Number of complete trials: ", len(complete_trials))
 
-    # print("Best trial:")
-    # trial = study.best_trial
+    print("Best trial:")
+    trial = study.best_trial
 
-    # print("  Value: ", trial.value)
+    print("  Value: ", trial.value)
 
-    # print("  Params: ")
-    # for key, value in trial.params.items():
-    #     print("    {}: {}".format(key, value))
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))
 
 if __name__ == '__main__':
     data_dir = './tp1/data/1/dataset-resized'
@@ -425,17 +427,19 @@ if __name__ == '__main__':
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        run_finetuning(
-            train_df,
-            test_df,
-            le,
-            head_name='Alalibo et all',
-            loss_fn_name='cross_entropy_weighted',
-            loss_fn_weights=[1.04, 0.84, 1.03, 0.71, 0.87, 3.07],
-            augmentation_strategy='albumentation_advanced',
-            class_balancing_strategy = 'oversampling',
-            lr = 1e-4
-        )
+        # run_finetuning(
+        #     train_df,
+        #     test_df,
+        #     le,
+        #     head_name='intermediate',
+        #     loss_fn_name='cross_entropy_weighted',
+        #     loss_fn_weights=[1.04, 0.84, 1.03, 0.71, 0.87, 3.07],
+        #     augmentation_strategy='albumentation_advanced',
+        #     class_balancing_strategy = 'oversampling',
+        #     lr = 1e-4
+        # )
+
+        hp_search(objective, 10)
 
 
 
