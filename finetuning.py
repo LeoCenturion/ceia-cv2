@@ -377,8 +377,10 @@ def objective(trial):
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
-        head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all', 'deeper_mlp'])
+        # augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
+        augmentation = 'albumentation_advanced'
+        # head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all', 'deeper_mlp'])
+        head = 'deeper_mlp'
         lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
         accuracy = run_finetuning(
             train_df, 
