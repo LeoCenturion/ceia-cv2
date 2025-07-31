@@ -327,6 +327,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     print(f"Confusion matrix saved to {cm_path}")
     
     # plt.show()
+    return accuracy
 
 def objective(trial):
     data_dir = './tp1/data/1/dataset-resized'
@@ -356,7 +357,7 @@ def objective(trial):
         augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
         head = trial.suggest_categorical("head", ['simple', 'Alalibo et all'])
         lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
-        run_finetuning(
+        accuracy = run_finetuning(
             train_df, 
             test_df, 
             le,
@@ -367,6 +368,7 @@ def objective(trial):
             balancing_target_samples=600,
             lr = lr
         )
+        return accuracy
 
 if __name__ == '__main__':
     # This allows running the fine-tuning script directly.
