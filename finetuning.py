@@ -355,7 +355,7 @@ def objective(trial):
 
         augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
         head = trial.suggest_categorical("head", ['simple', 'Alalibo et all'])
-        lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
+        lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
         run_finetuning(
             train_df, 
             test_df, 
