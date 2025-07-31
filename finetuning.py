@@ -22,6 +22,7 @@ from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, f1_score
+from sklearn.svm import SVC
 import optuna
 from optuna.trial import TrialState
 
@@ -172,7 +173,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
                    head_name: str = 'complex', loss_fn_name: str = 'cross_entropy',
                    loss_fn_weights : list[float] = [],
                    augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none',
-                   balancing_target_samples: int = None, lr = 5e-4):
+                   balancing_target_samples: int = None, lr = 5e-4,
+                   final_classifier: str = 'softmax'):
     print("Loading ResNet-50 model and replacing classification head...")
     num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
@@ -291,19 +293,58 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     print("\n--- Fine-tuning the classification head ---")
     trainer.train()
 
-    # 5. Evaluate the fine-tuned model
-    print("\n--- Evaluating the fine-tuned model ---")
-    prediction_output = trainer.predict(test_dataset)
-    y_pred_resnet_tuned = np.argmax(prediction_output.predictions, axis=1)
-    y_true_resnet_tuned = prediction_output.label_ids
+    # 5. Evaluate the model
+    print("\n--- Evaluating the model ---")
 
-    accuracy = accuracy_score(y_true_resnet_tuned, y_pred_resnet_tuned)
-    f1_weighted = f1_score(y_true_resnet_tuned, y_pred_resnet_tuned, average='weighted')
-    print(f"Fine-tuned ResNet-50 Accuracy: {accuracy:.4f}")
-    print(f"Fine-tuned ResNet-50 F1-Score (Weighted): {f1_weighted:.4f}")
+    y_true, y_pred, report, cm = None, None, None, None
+
+    if final_classifier == 'softmax':
+        print("Using softmax classifier for evaluation.")
+        prediction_output = trainer.predict(test_dataset)
+        y_pred = np.argmax(prediction_output.predictions, axis=1)
+        y_true = prediction_output.label_ids
+    
+    elif final_classifier == 'svm':
+        print("Extracting features for SVM...")
+        model.eval()
+        
+        # Create a feature extractor by removing the final linear layer
+        feature_extractor = copy.deepcopy(model)
+        feature_extractor.classifier = torch.nn.Sequential(*list(model.classifier.children())[:-1])
+
+        def extract_features(dataset, model, batch_size):
+            dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=os.cpu_count(), shuffle=False)
+            features_list = []
+            labels_list = []
+            with torch.no_grad():
+                for batch in tqdm(dataloader, desc="Extracting features"):
+                    inputs = batch['pixel_values'].to(device)
+                    base_output = model.base_model(pixel_values=inputs)
+                    pooled_output = base_output.pooler_output
+                    features = model.classifier(pooled_output)
+                    features_list.append(features.cpu().numpy())
+                    labels_list.append(batch['labels'].cpu().numpy())
+            return np.concatenate(features_list), np.concatenate(labels_list)
+
+        train_features, train_labels = extract_features(train_dataset, feature_extractor, batch_size)
+        test_features, y_true = extract_features(test_dataset, feature_extractor, batch_size)
+
+        print("Training SVM classifier...")
+        svm = SVC(gamma='auto', random_state=42)
+        svm.fit(train_features, train_labels)
+
+        print("Evaluating with SVM classifier...")
+        y_pred = svm.predict(test_features)
+    else:
+        raise ValueError(f"Unknown final_classifier: {final_classifier}")
+
+    accuracy = accuracy_score(y_true, y_pred)
+    f1_weighted = f1_score(y_true, y_pred, average='weighted')
+    print(f"Final Accuracy: {accuracy:.4f}")
+    print(f"Final F1-Score (Weighted): {f1_weighted:.4f}")
 
     print("\nClassification Report:")
-    report = classification_report(y_true_resnet_tuned, y_pred_resnet_tuned, target_names=le.classes_)
+    report = classification_report(y_true, y_pred, target_names=le.classes_)
     print(report)
 
     # Save the report to a file
@@ -312,14 +353,12 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         f.write(report)
     print(f"Classification report saved to {report_path}")
 
-    cm = confusion_matrix(y_true_resnet_tuned, y_pred_resnet_tuned)
+    cm = confusion_matrix(y_true, y_pred)
     fig = plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='cividis')
-    plt.title('Fine-tuned ResNet-50 Confusion Matrix')
+    plt.title(f'Confusion Matrix (Classifier: {final_classifier.upper()})')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
-
-    # The TensorBoard callback is managed manually, so we can access its writer directly.
 
     if writer:
         writer.add_text('Evaluation/Classification Report', '```\n' + report + '\n```')
@@ -333,6 +372,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
             'augmentation': augmentation_strategy,
             'class_balancing': class_balancing_strategy,
             'balancing_target_samples': balancing_target_samples,
+            'final_classifier': final_classifier,
             'patience': early_stopping_callback.early_stopping_patience,
             'last_epoch': trainer.state.epoch
         }
@@ -342,9 +382,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
             'hparam/best_val_loss': trainer.state.best_metric
         }
         writer.add_hparams(hparams, metrics)
-        # The writer is closed by the trainer.
     writer.close()
-    # Save the confusion matrix plot
+    
     cm_path = 'confusion_matrix.png'
     plt.savefig(cm_path, bbox_inches='tight')
     print(f"Confusion matrix saved to {cm_path}")
@@ -382,6 +421,7 @@ def objective(trial):
         # head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all', 'deeper_mlp'])
         head = 'deeper_mlp'
         lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
+        final_classifier = trial.suggest_categorical("final_classifier", ['softmax', 'svm'])
         accuracy = run_finetuning(
             train_df, 
             test_df, 
@@ -391,7 +431,8 @@ def objective(trial):
             augmentation_strategy=augmentation,
             class_balancing_strategy = 'oversampling',
             balancing_target_samples=600,
-            lr = lr
+            lr = lr,
+            final_classifier=final_classifier
         )
         return accuracy
 
