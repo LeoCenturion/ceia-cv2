@@ -131,6 +131,20 @@ def get_classifier_head(name: str, in_features: int, num_labels: int):
             torch.nn.Dropout(0.5),
             torch.nn.Linear(512, num_labels)
         )
+    elif name == 'deeper_mlp':
+        return torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(in_features, 1024),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(1024, 1024),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(1024, 512),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.5),
+            torch.nn.Linear(512, num_labels)
+        )
     else:
         raise ValueError(f"Unknown classifier head: {name}")
 
@@ -363,10 +377,8 @@ def objective(trial):
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        # augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
-        augmentation = 'albumentation_advanced'
-        # head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all'])
-        head = 'intermediate'
+        augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
+        head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all', 'deeper_mlp'])
         lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
         accuracy = run_finetuning(
             train_df, 
