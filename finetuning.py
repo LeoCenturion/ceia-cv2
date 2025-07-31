@@ -22,6 +22,8 @@ from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, f1_score
+import optuna
+from optuna.trial import TrialState
 
 def get_image_paths(data_dir: str) -> pd.DataFrame:
     """Gathers image paths and their categories from the data directory."""
@@ -217,7 +219,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
 
     training_args = TrainingArguments(
         output_dir='./results',
-        num_train_epochs=5,
+        num_train_epochs=24,
         learning_rate=lr,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
@@ -326,8 +328,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     
     # plt.show()
 
-if __name__ == '__main__':
-    # This allows running the fine-tuning script directly.
+def objective(trial):
     data_dir = './tp1/data/1/dataset-resized'
     
     print(f"Loading data from {data_dir}...")
@@ -352,16 +353,78 @@ if __name__ == '__main__':
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
 
+        augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
+        head = trial.suggest_categorical("head", ['simple', 'Alalibo et all'])
+        lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
         run_finetuning(
             train_df, 
             test_df, 
             le,
-            head_name='Alalibo et all',
+            head_name=head,
             loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy='albumentation_advanced',
+            augmentation_strategy=augmentation,
             class_balancing_strategy = 'oversampling',
             balancing_target_samples=600,
-            lr = 5e-4
+            lr = lr
         )
 
+if __name__ == '__main__':
+    # This allows running the fine-tuning script directly.
+    # data_dir = './tp1/data/1/dataset-resized'
+    
+    # print(f"Loading data from {data_dir}...")
+    # df = get_image_paths(data_dir)
+    
+    # if df.empty:
+    #     print("No images found. Exiting.")
+    # else:
+    #     print(f"Found {len(df)} images.")
 
+    #     # Create labels and split data
+    #     le = LabelEncoder()
+    #     df['category_encoded'] = le.fit_transform(df['category'])
+
+    #     train_df, test_df = train_test_split(
+    #         df,
+    #         test_size=0.3,
+    #         random_state=42,
+    #         stratify=df['category_encoded']
+    #     )
+
+    #     print(f"Train set size: {len(train_df)}")
+    #     print(f"Test set size: {len(test_df)}")
+
+    #     run_finetuning(
+    #         train_df, 
+    #         test_df, 
+    #         le,
+    #         head_name='Alalibo et all',
+    #         loss_fn_name='cross_entropy_weighted',
+    #         augmentation_strategy='albumentation_advanced',
+    #         class_balancing_strategy = 'oversampling',
+    #         balancing_target_samples=600,
+    #         lr = 3e-4
+    #     )
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=100, timeout=600)
+
+    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+
+    print("Study statistics: ")
+    print("  Number of finished trials: ", len(study.trials))
+    print("  Number of pruned trials: ", len(pruned_trials))
+    print("  Number of complete trials: ", len(complete_trials))
+
+    print("Best trial:")
+    trial = study.best_trial
+
+    print("  Value: ", trial.value)
+
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))
+
+
+    
