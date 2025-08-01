@@ -22,8 +22,6 @@ from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, f1_score
-import optuna
-from optuna.trial import TrialState
 
 def get_image_paths(data_dir: str) -> pd.DataFrame:
     """Gathers image paths and their categories from the data directory."""
@@ -231,8 +229,13 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     
     batch_size = 128
     
+    # Freeze all layers first, then unfreeze the last stage
+    print("Unfreezing the last stage of ResNet-50 for fine-tuning...")
     for param in model.base_model.parameters():
         param.requires_grad = False
+    
+    for param in model.base_model.encoder.stages[-1].parameters():
+        param.requires_grad = True
 
     # Create a timestamped logging directory like Jul27_14-29-08_fedora
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
@@ -288,7 +291,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         **trainer_kwargs,
     )
     
-    print("\n--- Fine-tuning the classification head ---")
+    print("\n--- Fine-tuning the model (head and last ResNet stage) ---")
     trainer.train()
 
     # 5. Evaluate the model
@@ -351,70 +354,6 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     # plt.show()
     return accuracy
 
-def objective(trial):
-    data_dir = './tp1/data/1/dataset-resized'
-    
-    print(f"Loading data from {data_dir}...")
-    df = get_image_paths(data_dir)
-    
-    if df.empty:
-        print("No images found. Exiting.")
-    else:
-        print(f"Found {len(df)} images.")
-
-        # Create labels and split data
-        le = LabelEncoder()
-        df['category_encoded'] = le.fit_transform(df['category'])
-
-        train_df, test_df = train_test_split(
-            df,
-            test_size=0.3,
-            random_state=42,
-            stratify=df['category_encoded']
-        )
-
-        print(f"Train set size: {len(train_df)}")
-        print(f"Test set size: {len(test_df)}")
-
-        # augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
-        augmentation = 'albumentation_advanced'
-        # head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all', 'deeper_mlp'])
-        head = 'deeper_mlp'
-        lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
-        accuracy = run_finetuning(
-            train_df, 
-            test_df, 
-            le,
-            head_name=head,
-            loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy=augmentation,
-            class_balancing_strategy = 'oversampling',
-            balancing_target_samples=600,
-            lr = lr
-        )
-        return accuracy
-
-def hp_search(objective, n_trials):
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials)
-
-    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
-
-    print("Study statistics: ")
-    print("  Number of finished trials: ", len(study.trials))
-    print("  Number of pruned trials: ", len(pruned_trials))
-    print("  Number of complete trials: ", len(complete_trials))
-
-    print("Best trial:")
-    trial = study.best_trial
-
-    print("  Value: ", trial.value)
-
-    print("  Params: ")
-    for key, value in trial.params.items():
-        print("    {}: {}".format(key, value))
-
 if __name__ == '__main__':
     data_dir = './tp1/data/1/dataset-resized'
 
@@ -450,4 +389,3 @@ if __name__ == '__main__':
             class_balancing_strategy = 'oversampling',
             lr=0.0016575
         )
-        # hp_search(objective, 10)
