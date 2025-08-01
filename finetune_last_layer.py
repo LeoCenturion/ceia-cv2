@@ -387,5 +387,5 @@ if __name__ == '__main__':
             loss_fn_name='cross_entropy_weighted',
             augmentation_strategy='albumentation_advanced',
             class_balancing_strategy = 'oversampling',
-            lr=0.0016575
+            lr=0.00026575
         )
