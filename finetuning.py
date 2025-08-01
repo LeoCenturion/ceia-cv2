@@ -330,6 +330,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
         test_features, y_true = extract_features(test_dataset, feature_extractor, batch_size)
 
         print("Training SVM classifier...")
+        print(train_features.shape)
         svm = SVC(gamma='auto', random_state=42)
         svm.fit(train_features, train_labels)
 
@@ -482,19 +483,19 @@ if __name__ == '__main__':
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        # run_finetuning(
-        #     train_df,
-        #     test_df,
-        #     le,
-        #     head_name='intermediate',
-        #     loss_fn_name='cross_entropy_weighted',
-        #     loss_fn_weights=[1.04, 0.84, 1.03, 0.71, 0.87, 3.07],
-        #     augmentation_strategy='albumentation_advanced',
-        #     class_balancing_strategy = 'oversampling',
-        #     lr = 1e-4
-        # )
+        run_finetuning(
+            train_df,
+            test_df,
+            le,
+            head_name='simple',
+            loss_fn_name='cross_entropy_weighted',
+            augmentation_strategy='albumentation_advanced',
+            class_balancing_strategy = 'oversampling',
+            final_classifier='svm',
+            lr=0.0016575
+        )
+        # hp_search(objective, 10)
 
-        hp_search(objective, 10)
 
 
 
