@@ -22,8 +22,7 @@ from tqdm.auto import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, f1_score
-import optuna
-from optuna.trial import TrialState
+from sklearn.svm import SVC
 
 def get_image_paths(data_dir: str) -> pd.DataFrame:
     """Gathers image paths and their categories from the data directory."""
@@ -168,7 +167,7 @@ class WeightedLossTrainer(Trainer):
         loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
         return (loss, outputs) if return_outputs else loss
 
-def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncoder,
+def run_finetuning_with_svm(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncoder,
                    head_name: str = 'complex', loss_fn_name: str = 'cross_entropy',
                    loss_fn_weights : list[float] = [],
                    augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none',
@@ -294,10 +293,37 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     # 5. Evaluate the model
     print("\n--- Evaluating the model ---")
 
-    print("Using softmax classifier for evaluation.")
-    prediction_output = trainer.predict(test_dataset)
-    y_pred = np.argmax(prediction_output.predictions, axis=1)
-    y_true = prediction_output.label_ids
+    print("Extracting features for SVM...")
+    model.eval()
+    
+    # Create a feature extractor by removing the final linear layer
+    feature_extractor = copy.deepcopy(model)
+    feature_extractor.classifier = torch.nn.Sequential(*list(model.classifier.children())[:-1])
+
+    def extract_features(dataset, model, batch_size):
+        dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=os.cpu_count(), shuffle=False)
+        features_list = []
+        labels_list = []
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc="Extracting features"):
+                inputs = batch['pixel_values'].to(device)
+                base_output = model.base_model(pixel_values=inputs)
+                pooled_output = base_output.pooler_output
+                features = model.classifier(pooled_output)
+                features_list.append(features.cpu().numpy())
+                labels_list.append(batch['labels'].cpu().numpy())
+        return np.concatenate(features_list), np.concatenate(labels_list)
+
+    train_features, train_labels = extract_features(train_dataset, feature_extractor, batch_size)
+    test_features, y_true = extract_features(test_dataset, feature_extractor, batch_size)
+
+    print("Training SVM classifier...")
+    print(train_features.shape)
+    svm = SVC(gamma='auto', random_state=42)
+    svm.fit(train_features, train_labels)
+
+    print("Evaluating with SVM classifier...")
+    y_pred = svm.predict(test_features)
 
     accuracy = accuracy_score(y_true, y_pred)
     f1_weighted = f1_score(y_true, y_pred, average='weighted')
@@ -317,7 +343,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     cm = confusion_matrix(y_true, y_pred)
     fig = plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', xticklabels=le.classes_, yticklabels=le.classes_, cmap='cividis')
-    plt.title('Fine-tuned ResNet-50 Confusion Matrix')
+    plt.title('Confusion Matrix (Classifier: SVM)')
     plt.xlabel('Predicted Label')
     plt.ylabel('True Label')
 
@@ -351,71 +377,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     # plt.show()
     return accuracy
 
-def objective(trial):
-    data_dir = './tp1/data/1/dataset-resized'
-    
-    print(f"Loading data from {data_dir}...")
-    df = get_image_paths(data_dir)
-    
-    if df.empty:
-        print("No images found. Exiting.")
-    else:
-        print(f"Found {len(df)} images.")
-
-        # Create labels and split data
-        le = LabelEncoder()
-        df['category_encoded'] = le.fit_transform(df['category'])
-
-        train_df, test_df = train_test_split(
-            df,
-            test_size=0.3,
-            random_state=42,
-            stratify=df['category_encoded']
-        )
-
-        print(f"Train set size: {len(train_df)}")
-        print(f"Test set size: {len(test_df)}")
-
-        # augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
-        augmentation = 'albumentation_advanced'
-        # head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all', 'deeper_mlp'])
-        head = 'deeper_mlp'
-        lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
-        accuracy = run_finetuning(
-            train_df, 
-            test_df, 
-            le,
-            head_name=head,
-            loss_fn_name='cross_entropy_weighted',
-            augmentation_strategy=augmentation,
-            class_balancing_strategy = 'oversampling',
-            balancing_target_samples=600,
-            lr = lr
-        )
-        return accuracy
-
-def hp_search(objective, n_trials):
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials)
-
-    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
-
-    print("Study statistics: ")
-    print("  Number of finished trials: ", len(study.trials))
-    print("  Number of pruned trials: ", len(pruned_trials))
-    print("  Number of complete trials: ", len(complete_trials))
-
-    print("Best trial:")
-    trial = study.best_trial
-
-    print("  Value: ", trial.value)
-
-    print("  Params: ")
-    for key, value in trial.params.items():
-        print("    {}: {}".format(key, value))
-
-if __name__ == '__main__':
+def main():
     data_dir = './tp1/data/1/dataset-resized'
 
     print(f"Loading data from {data_dir}...")
@@ -440,7 +402,7 @@ if __name__ == '__main__':
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        run_finetuning(
+        run_finetuning_with_svm(
             train_df,
             test_df,
             le,
@@ -450,8 +412,6 @@ if __name__ == '__main__':
             class_balancing_strategy = 'oversampling',
             lr=0.0016575
         )
-        # hp_search(objective, 10)
 
-
-
-
+if __name__ == '__main__':
+    main()
