@@ -379,15 +379,22 @@ def objective(trial):
         augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
         head = trial.suggest_categorical("head", ['simple', 'intermediate', 'Alalibo et all', 'deeper_mlp'])
         lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
+        loss_fn_name = trial.suggest_categorical("loss_fn_name", ["cross_entropy_weighted", "cross_entropy"])
+        class_balancing_strategy = trial.suggest_categorical("class_balancing_strategy", ["oversampling", "none"])
+        
+        balancing_target_samples = None
+        if class_balancing_strategy == "oversampling":
+            balancing_target_samples = trial.suggest_int("balancing_target_samples", 300, 1000, step=100)
+
         accuracy = run_finetuning(
             train_df, 
             test_df, 
             le,
             head_name=head,
-            loss_fn_name='cross_entropy_weighted',
+            loss_fn_name=loss_fn_name,
             augmentation_strategy=augmentation,
-            class_balancing_strategy = 'oversampling',
-            balancing_target_samples=600,
+            class_balancing_strategy=class_balancing_strategy,
+            balancing_target_samples=balancing_target_samples,
             lr = lr
         )
         return accuracy
