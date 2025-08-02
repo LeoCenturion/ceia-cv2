@@ -173,7 +173,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
                    loss_fn_weights : list[float] = [],
                    augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none',
                    balancing_target_samples: int = None, lr = 5e-4,
-                   train_enconder_layers=1):
+                   train_encoder_layers=1):
     print("Loading ResNet-50 model and replacing classification head...")
     num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
@@ -230,7 +230,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     train_dataset = ImageClassificationDataset(train_df, processor, le, transform=train_transforms)
     test_dataset = ImageClassificationDataset(test_df, processor, le, transform=None)
     
-    batch_size = 128
+    batch_size = int(128 / train_encoder_layers)
     
     # Freeze all layers first, then unfreeze the last stage
     print("Unfreezing the last stage of ResNet-50 for fine-tuning...")
@@ -386,14 +386,11 @@ def objective(trial):
         augmentation = trial.suggest_categorical("augmentation", ['Alalibo et all'])
         head = trial.suggest_categorical("head", ['simple', 'Alalibo et all'])
         lr = trial.suggest_float("lr", low=1e-4, high=6e-4, log=True)
-        loss_fn_name = trial.suggest_categorical("loss_fn_name", ["cross_entropy_weighted", "cross_entropy"])
-        class_balancing_strategy = trial.suggest_categorical("class_balancing_strategy", ["oversampling", "none"])
+        loss_fn_name = trial.suggest_categorical("loss_fn_name", ["cross_entropy_weighted"])
+        class_balancing_strategy = trial.suggest_categorical("class_balancing_strategy", ["oversampling"])
 
-        balancing_target_samples = None
-        if class_balancing_strategy == "oversampling":
-            balancing_target_samples = trial.suggest_int("balancing_target_samples", 300, 1000, step=100)
-        
-        train_enconder_layers = trial.suggest_int("train_enconder_layers", 1, 4)
+        balancing_target_samples = trial.suggest_categorical("balancing_target_samples", [None])
+        train_enconder_layers = trial.suggest_int("train_enconder_layers", low=2, high=3)
 
         accuracy = run_finetuning(
             train_df, 
@@ -405,7 +402,7 @@ def objective(trial):
             class_balancing_strategy=class_balancing_strategy,
             balancing_target_samples=balancing_target_samples,
             lr = lr,
-            train_enconder_layers=train_enconder_layers
+            train_encoder_layers=train_enconder_layers
         )
         return accuracy
 
