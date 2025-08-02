@@ -172,7 +172,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
                    head_name: str = 'complex', loss_fn_name: str = 'cross_entropy',
                    loss_fn_weights : list[float] = [],
                    augmentation_strategy: str = 'none', class_balancing_strategy: str = 'none',
-                   balancing_target_samples: int = None, lr = 5e-4):
+                   balancing_target_samples: int = None, lr = 5e-4,
+                   train_enconder_layers=1):
     print("Loading ResNet-50 model and replacing classification head...")
     num_labels = len(le.classes_)
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
@@ -236,7 +237,7 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
     for param in model.base_model.parameters():
         param.requires_grad = False
     
-    for param in model.base_model.encoder.stages[-1].parameters():
+    for param in model.base_model.encoder.stages[-train_encoder_layers].parameters():
         param.requires_grad = True
 
     # Create a timestamped logging directory like Jul27_14-29-08_fedora
@@ -339,7 +340,8 @@ def run_finetuning(train_df: pd.DataFrame, test_df: pd.DataFrame, le: LabelEncod
             'class_balancing': class_balancing_strategy,
             'balancing_target_samples': balancing_target_samples,
             'patience': early_stopping_callback.early_stopping_patience,
-            'last_epoch': trainer.state.epoch
+            'last_epoch': trainer.state.epoch,
+            'train_encoder_layers': train_encoder_layers
         }
         metrics = {
             'hparam/accuracy': accuracy,
@@ -381,9 +383,9 @@ def objective(trial):
         print(f"Train set size: {len(train_df)}")
         print(f"Test set size: {len(test_df)}")
 
-        augmentation = trial.suggest_categorical("augmentation", ['albumentation_advanced', 'Alalibo et all'])
+        augmentation = trial.suggest_categorical("augmentation", ['Alalibo et all'])
         head = trial.suggest_categorical("head", ['simple', 'Alalibo et all'])
-        lr = trial.suggest_float("lr", low=1e-5, high=1e-3, log=True)
+        lr = trial.suggest_float("lr", low=1e-4, high=6e-4, log=True)
         accuracy = run_finetuning(
             train_df, 
             test_df, 
@@ -398,7 +400,7 @@ def objective(trial):
         return accuracy
 
 def hp_search(objective, n_trials):
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(direction="maximize", storage="sqlite:///finetune.db", study_name="finetuning", load_if_exists=True)
     study.optimize(objective, n_trials)
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
