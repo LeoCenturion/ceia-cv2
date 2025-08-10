@@ -27,7 +27,8 @@ dependencies = [
     "accelerate (>=1.9.0,<2.0.0)",
     "tensorboard (>=2.20.0,<3.0.0)",
     "torchviz (>=0.0.3,<0.0.4)",
-    "albumentations (>=2.0.8,<3.0.0)"
+    "albumentations (>=2.0.8,<3.0.0)",
+    "optuna (>=4.4.0,<5.0.0)"
 ]
 
 
